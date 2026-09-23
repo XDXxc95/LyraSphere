@@ -62,7 +62,7 @@
     "vue-i18n": "^11.2.2"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.6.9",
+    "@capacitor/cli": "^8.5.2",
     "@electron-toolkit/eslint-config": "^2.1.0",
     "@electron-toolkit/eslint-config-ts": "^3.1.0",
     "@electron-toolkit/tsconfig": "^1.0.1",
