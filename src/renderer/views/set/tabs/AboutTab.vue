@@ -39,14 +39,55 @@
       </s-btn>
     </setting-item>
   </setting-section>
+
+  <!-- 排障用：只在原生端出现，桌面端日志在控制台里直接看 -->
+  <setting-section v-if="logAvailable" :title="t('settings.about.log.title')">
+    <setting-item :title="t('settings.about.log.file')">
+      <template #description>
+        <span>{{ t('settings.about.log.fileDesc') }}</span>
+        <div v-if="logInfo" class="mt-1 text-xs font-mono break-all opacity-70">
+          {{ logInfo.path }}（{{ formatSize(logInfo.sizeBytes) }}）
+        </div>
+      </template>
+      <template #action>
+        <div class="flex items-center gap-2 flex-wrap">
+          <s-btn :loading="opening" @click="handleOpenLogFolder">
+            <i class="ri-folder-open-line mr-1"></i>{{ t('settings.about.log.openFolder') }}
+          </s-btn>
+          <s-btn variant="ghost" @click="handleShareLog">
+            <i class="ri-share-line mr-1"></i>{{ t('settings.about.log.share') }}
+          </s-btn>
+        </div>
+      </template>
+    </setting-item>
+
+    <setting-item
+      :title="t('settings.about.log.clear')"
+      :description="t('settings.about.log.clearDesc')"
+    >
+      <template #action>
+        <s-btn variant="danger" @click="handleClearLog">
+          <i class="ri-delete-bin-line mr-1"></i>{{ t('settings.about.log.clear') }}
+        </s-btn>
+      </template>
+    </setting-item>
+  </setting-section>
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue';
+import { computed, inject, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import { useSettingsStore } from '@/store/modules/settings';
 import { isElectron } from '@/utils';
+import {
+  clearAppLog,
+  getLogInfo,
+  isAppLogAvailable,
+  LogInfo,
+  openAppLogFolder,
+  shareAppLog
+} from '@/utils/appLog';
 import { checkUpdate, UpdateResult } from '@/utils/update';
 
 import config from '../../../../../package.json';
@@ -155,6 +196,64 @@ const openManualUpdatePage = async () => {
 const openAuthor = () => {
   window.open(setData.value.authorUrl);
 };
+
+// ==================== 诊断日志 ====================
+
+const logAvailable = isAppLogAvailable;
+const logInfo = ref<LogInfo | null>(null);
+const opening = ref(false);
+
+const formatSize = (bytes: number) => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+};
+
+const refreshLogInfo = async () => {
+  logInfo.value = await getLogInfo();
+};
+
+const handleOpenLogFolder = async () => {
+  opening.value = true;
+  try {
+    const result = await openAppLogFolder();
+    if (result.opened) {
+      message.success(t('settings.about.log.opened', { path: result.path }));
+    } else {
+      // 有些文件管理器不认「打开目录」这个 Intent，退回分享面板，
+      // 用户照样能把文件发出来（发到微信/邮件/保存到文件都行）
+      message.warning(t('settings.about.log.openFailed', { path: result.path }));
+      await shareAppLog();
+    }
+    await refreshLogInfo();
+  } catch (error) {
+    console.error('打开日志目录失败:', error);
+    message.error(t('settings.about.log.openFailed', { path: '' }));
+  } finally {
+    opening.value = false;
+  }
+};
+
+const handleShareLog = async () => {
+  try {
+    await shareAppLog();
+  } catch (error) {
+    console.error('分享日志失败:', error);
+    message.error(t('settings.about.log.shareFailed'));
+  }
+};
+
+const handleClearLog = async () => {
+  try {
+    await clearAppLog();
+    await refreshLogInfo();
+    message.success(t('settings.about.log.cleared'));
+  } catch (error) {
+    console.error('清空日志失败:', error);
+  }
+};
+
+onMounted(refreshLogInfo);
 
 defineExpose({ checkForUpdates });
 </script>

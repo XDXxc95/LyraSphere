@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="notification_channel_now_playing">Now Playing</string>
+    <string name="notification_channel_now_playing_desc">Shows the current track and playback controls</string>
+    <string name="notification_action_prev">Previous</string>
+    <string name="notification_action_play">Play</string>
+    <string name="notification_action_pause">Pause</string>
+    <string name="notification_action_next">Next</string>
+</resources>

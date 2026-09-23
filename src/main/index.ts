@@ -17,7 +17,12 @@ import { initializeRemoteControl } from './modules/remoteControl';
 import { initializeShortcuts } from './modules/shortcuts';
 import { initializeTray, updateCurrentSong, updatePlayState, updateTrayMenu } from './modules/tray';
 import { setupUpdateHandlers } from './modules/update';
-import { createMainWindow, initializeWindowManager, setAppQuitting } from './modules/window';
+import {
+  createMainWindow,
+  initializeWindowManager,
+  setAppQuitting,
+  updateTaskbarSongTitle
+} from './modules/window';
 import { initWindowSizeManager } from './modules/window-size';
 import { startMusicApi } from './server';
 
@@ -170,6 +175,8 @@ if (!isSingleInstance) {
   // 监听当前歌曲变化
   ipcMain.on('update-current-song', (_, song: any) => {
     updateCurrentSong(song);
+    // 同一个 payload 再喂给任务栏标题，省得再开一条 IPC
+    updateTaskbarSongTitle(song);
   });
 
   // 所有窗口关闭时的处理

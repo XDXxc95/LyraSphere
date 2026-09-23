@@ -138,6 +138,6 @@ watch(show, (val) => {
 }
 
 .pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: var(--safe-area-inset-bottom, 0px);
 }
 </style>

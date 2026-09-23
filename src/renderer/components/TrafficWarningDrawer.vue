@@ -9,7 +9,7 @@
     :mask-closable="false"
   >
     <n-drawer-content
-      title="欢迎使用 AlgerMusicPlayer"
+      title="欢迎使用 Lyra Sphere"
       closable
       :native-scrollbar="false"
       class="mac-style-drawer"
@@ -38,37 +38,9 @@
             >
               <i class="ri-file-text-line mr-1"></i> 查看使用文档
             </a>
-            <a href="http://donate.alger.fun/download" target="_blank" class="download-link">
-              <i class="ri-download-2-line mr-1"></i> 立即下载
-            </a>
-          </div>
-
-          <div class="qrcode-section">
-            <img class="qrcode" src="@/assets/gzh.png" alt="公众号" />
-            <p>关注公众号获取最新版本与更新信息</p>
-          </div>
-
-          <div class="support-section">
-            <h4>支持项目</h4>
-            <p class="support-desc">您的支持是我们持续改进的动力</p>
-            <div class="payment-options">
-              <div class="payment-option">
-                <div class="payment-icon wechat">
-                  <img src="@/assets/wechat.png" alt="微信支付" />
-                </div>
-                <span>微信支付</span>
-              </div>
-              <div class="payment-option">
-                <div class="payment-icon alipay">
-                  <img src="@/assets/alipay.png" alt="支付宝" />
-                </div>
-                <span>支付宝</span>
-              </div>
-            </div>
           </div>
 
           <div class="drawer-actions">
-            <n-button secondary class="action-button" @click="markAsDonated">已支持</n-button>
             <n-button type="primary" class="action-button primary" @click="remindLater"
               >稍后提醒</n-button
             >
@@ -95,22 +67,14 @@ const handleDrawerClose = () => {
 // 一天后提醒
 const remindLater = () => {
   const now = new Date();
-  localStorage.setItem('trafficDonated4RemindLater', now.toISOString());
+  localStorage.setItem('welcomeDrawerRemindLater', now.toISOString());
   showDrawer.value = false;
 };
 
-// 标记为已捐赠（永久不再提示）
-const markAsDonated = () => {
-  localStorage.setItem('trafficDonated4Never', '1');
-  showDrawer.value = false;
-};
 // 组件挂载时检查是否需要显示
 onMounted(() => {
-  // 优先判断是否永久不再提示
-  if (localStorage.getItem('trafficDonated4Never')) return;
-
   // 判断一天后提醒
-  const remindLaterTime = localStorage.getItem('trafficDonated4RemindLater');
+  const remindLaterTime = localStorage.getItem('welcomeDrawerRemindLater');
   if (remindLaterTime) {
     const lastRemind = new Date(remindLaterTime);
     const now = new Date();
@@ -243,82 +207,6 @@ onMounted(() => {
   }
 }
 
-.qrcode-section {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-
-  .qrcode {
-    width: 180px;
-    height: 180px;
-    border-radius: 10px;
-    padding: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    background: white;
-  }
-
-  p {
-    margin-top: 14px;
-    font-size: 15px;
-    color: #0062cc;
-  }
-}
-
-.support-section {
-  width: 100%;
-  text-align: center;
-
-  h4 {
-    font-size: 22px;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 8px;
-  }
-
-  .support-desc {
-    font-size: 15px;
-    color: #555;
-    margin-bottom: 20px;
-  }
-}
-
-.payment-options {
-  display: flex;
-  justify-content: center;
-  gap: 100px;
-  flex-wrap: wrap;
-  padding-bottom: 100px;
-}
-
-.payment-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-
-  .payment-icon {
-    width: 220px;
-    height: 220px;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-  }
-
-  span {
-    font-size: 15px;
-    color: #444;
-  }
-}
-
 .drawer-actions {
   display: flex;
   justify-content: center;
@@ -368,20 +256,6 @@ onMounted(() => {
   .app-icon {
     width: 64px;
     height: 64px;
-  }
-
-  .qrcode-section {
-    .qrcode {
-      width: 140px;
-      height: 140px;
-    }
-  }
-
-  .payment-option {
-    .payment-icon {
-      width: 190px;
-      height: 190px;
-    }
   }
 
   .drawer-actions {

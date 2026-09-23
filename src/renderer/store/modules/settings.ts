@@ -3,7 +3,10 @@ import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
 
 import setDataDefault from '@/../main/set.json';
-import { PRESET_CUSTOM_API_PLUGIN } from '@/const/music-source-preset';
+import {
+  LEGACY_PRESET_CUSTOM_API_URLS,
+  PRESET_CUSTOM_API_PLUGIN
+} from '@/const/music-source-preset';
 import homeRouter from '@/router/home';
 import { useMenuStore } from '@/store/modules/menu';
 import { isElectron } from '@/utils';
@@ -16,6 +19,20 @@ import {
 } from '@/utils/theme';
 
 import { type AppUpdateState,createDefaultAppUpdateState } from '../../../shared/appUpdate';
+
+/**
+ * 存下来的是不是「旧域名版本的预置插件」。
+ *
+ * 只比对 {@link LEGACY_PRESET_CUSTOM_API_URLS} 里的确切地址，用户自己导入的插件一律不碰。
+ */
+const isLegacyPresetPlugin = (pluginJson?: string): boolean => {
+  if (!pluginJson) return false;
+  try {
+    return LEGACY_PRESET_CUSTOM_API_URLS.includes(JSON.parse(pluginJson)?.apiUrl);
+  } catch {
+    return false;
+  }
+};
 
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeType>(getCurrentTheme());
@@ -73,7 +90,9 @@ export const useSettingsStore = defineStore('settings', () => {
     // 非 Electron 环境（Web / Android）没有本地解锁服务，预置公开音源，
     // 用户自行导入过插件时不覆盖
     if (!isElectron) {
-      if (!mergedSettings.customApiPlugin) {
+      // 存量数据里存的是旧域名的预置插件（证书校验过不去那一版），一并迁到当前地址，
+      // 否则只改常量对已经跑过一次的老用户不生效
+      if (!mergedSettings.customApiPlugin || isLegacyPresetPlugin(mergedSettings.customApiPlugin)) {
         mergedSettings.customApiPlugin = JSON.stringify(PRESET_CUSTOM_API_PLUGIN);
         mergedSettings.customApiPluginName = PRESET_CUSTOM_API_PLUGIN.name;
       }

@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.algermusic.app',
-  appName: 'AlgerMusicPlayer',
+  appName: 'Lyra Sphere',
   webDir: 'out/renderer',
   server: {
     androidScheme: 'http',

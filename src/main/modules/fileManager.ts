@@ -514,7 +514,10 @@ async function downloadMusic(
 
     // 先获取文件大小
     const headResponse = await axios.head(url);
-    const totalSize = parseInt(headResponse.headers['content-length'] || '0', 10);
+    // axios 新版把 headers 收成 AxiosHeaders，下标取值的静态类型是
+    // string | number | string[] | …，而 parseInt 只收 string。运行时本来就会强制转一次，
+    // 这里显式 String() 只是把同一件事写进类型里。
+    const totalSize = parseInt(String(headResponse.headers['content-length'] || '0'), 10);
 
     // 开始下载到临时文件
     const response = await axios({

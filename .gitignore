@@ -16,6 +16,9 @@ dist.zip
 # build logs
 *.log
 
+# TypeScript 增量编译缓存
+*.tsbuildinfo
+
 .vscode
 
 bun.lockb

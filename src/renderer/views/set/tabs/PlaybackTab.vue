@@ -12,16 +12,22 @@
         />
       </setting-item>
 
-      <setting-item v-if="isElectron" :title="t('settings.playback.musicSources')">
+      <setting-item :title="t('settings.playback.musicSources')">
         <template #description>
-          <div class="flex items-center gap-2">
+          <!-- 本地解锁服务的总开关。这条链路整个挂在主进程上（UnblockMusicStrategy 里
+               直接 `if (!isElectron) return false`），手机 / Web 上没有，摆出来只会误导 -->
+          <div v-if="isElectron" class="flex items-center gap-2">
             <n-switch v-model:value="setData.enableMusicUnblock">
               <template #checked>{{ t('common.on') }}</template>
               <template #unchecked>{{ t('common.off') }}</template>
             </n-switch>
             <span>{{ t('settings.playback.musicUnblockEnableDesc') }}</span>
           </div>
-          <div v-if="setData.enableMusicUnblock" class="mt-2 text-sm">
+          <div v-else class="text-sm text-gray-500 dark:text-gray-400">
+            {{ t('settings.playback.musicSourcesDesc') }}
+          </div>
+
+          <div v-if="!isElectron || setData.enableMusicUnblock" class="mt-2 text-sm">
             <span class="text-gray-500">{{ t('settings.playback.selectedMusicSources') }}</span>
             <span v-if="musicSources.length > 0" class="text-gray-400">{{
               musicSources.join(', ')
@@ -31,9 +37,28 @@
             }}</span>
           </div>
         </template>
-        <s-btn :disabled="!setData.enableMusicUnblock" @click="showMusicSourcesModal = true">
+        <s-btn
+          :disabled="isElectron && !setData.enableMusicUnblock"
+          @click="showMusicSourcesModal = true"
+        >
           {{ t('settings.playback.configureMusicSources') }}
         </s-btn>
+      </setting-item>
+
+      <!-- 网易云接口地址（搜索、歌曲详情走的那个）。桌面端这是主进程起的本地服务，地址由
+           NetworkTab 里的端口决定；手机 / Web 只能连远端，而那个地址原本是编译期写死的，
+           没配 VITE_API 就固定落在内置兜底上，用户没法改。
+           留空时的默认值就是占位符里那个，见 utils/request.ts 的 DEFAULT_NETEASE_API -->
+      <setting-item
+        v-if="!isElectron"
+        :title="t('settings.playback.neteaseApiUrl')"
+        :description="t('settings.playback.neteaseApiUrlDesc')"
+      >
+        <s-input
+          v-model="setData.neteaseApiUrl"
+          :placeholder="DEFAULT_NETEASE_API"
+          width="w-64 max-md:w-full"
+        />
       </setting-item>
 
       <setting-item
@@ -86,11 +111,7 @@
       </div>
     </div>
 
-    <music-source-settings
-      v-if="isElectron"
-      v-model:show="showMusicSourcesModal"
-      v-model:sources="musicSources"
-    />
+    <music-source-settings v-model:show="showMusicSourcesModal" v-model:sources="musicSources" />
   </div>
 </template>
 
@@ -102,14 +123,19 @@ import AudioDeviceSettings from '@/components/settings/AudioDeviceSettings.vue';
 import MusicSourceSettings from '@/components/settings/MusicSourceSettings.vue';
 import { type Platform } from '@/types/music';
 import { isElectron } from '@/utils';
+import { DEFAULT_NETEASE_API } from '@/utils/request';
 
 import { SETTINGS_DATA_KEY } from '../keys';
 import SBtn from '../SBtn.vue';
 import SettingItem from '../SettingItem.vue';
 import SettingSection from '../SettingSection.vue';
+import SInput from '../SInput.vue';
 import SSelect from '../SSelect.vue';
 
 const ALL_PLATFORMS: Platform[] = ['migu', 'kugou', 'kuwo', 'pyncmd'];
+/** 非桌面端能用的音源里最稳的那个，用来兜底 */
+const FALLBACK_PLATFORMS: Platform[] = ['custom'];
+const DEFAULT_PLATFORMS = isElectron ? ALL_PLATFORMS : FALLBACK_PLATFORMS;
 
 const memberLinks = [
   { name: '网易云音乐会员', url: 'https://music.163.com/store/vip' },
@@ -137,11 +163,11 @@ const qualityOptions = computed(() => [
 
 const musicSources = computed({
   get: () => {
-    if (!setData.value.enabledMusicSources) return ALL_PLATFORMS;
+    if (!setData.value.enabledMusicSources) return DEFAULT_PLATFORMS;
     return setData.value.enabledMusicSources as Platform[];
   },
   set: (newValue: Platform[]) => {
-    const valuesToSet = newValue.length > 0 ? [...new Set(newValue)] : ALL_PLATFORMS;
+    const valuesToSet = newValue.length > 0 ? [...new Set(newValue)] : DEFAULT_PLATFORMS;
     setData.value = { ...setData.value, enabledMusicSources: valuesToSet };
   }
 });

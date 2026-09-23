@@ -30,7 +30,6 @@
 
 <script setup lang="ts">
 import { computed, defineAsyncComponent, provide, ref } from 'vue';
-import { useRoute } from 'vue-router';
 
 import homeRouter from '@/router/home';
 import otherRouter from '@/router/other';
@@ -49,7 +48,6 @@ const props = defineProps<{
   isPhone: boolean;
 }>();
 
-const route = useRoute();
 const playerStore = usePlayerStore();
 const menuStore = useMenuStore();
 
@@ -59,11 +57,8 @@ provide('hasSafeArea', props.isPhone);
 // 是否有播放的歌曲
 const isPlay = computed(() => playerStore.playMusic && playerStore.playMusic.id);
 
-// 是否显示底部菜单
-const shouldShowBottomMenu = computed(() => {
-  const menuPaths = menuStore.menus.map((item: any) => item.path);
-  return menuPaths.includes(route.path) && !playerStore.musicFull;
-});
+// 底部功能栏常驻：除全屏播放器外，所有页面都显示
+const shouldShowBottomMenu = computed(() => !playerStore.musicFull);
 
 // 提供给 MobilePlayBar 使用，用于调整播放栏位置
 provide('shouldShowMobileMenu', shouldShowBottomMenu);
@@ -105,15 +100,10 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 .mobile-content {
   @apply flex-1 overflow-auto;
 
-  // // 只有底部菜单
-  // &.has-bottom-menu:not(.has-player) {
-  //   padding-bottom: calc(60px + var(--safe-area-inset-bottom, 0px));
-  // }
-
-  // // 只有播放栏
-  // &.has-player:not(.has-bottom-menu) {
-  //   padding-bottom: calc(70px + var(--safe-area-inset-bottom, 0px));
-  // }
+  // 底部既没有菜单也没有播放栏时，内容直接贴到屏幕底边，需要避开全面屏手势条
+  &:not(.has-bottom-menu):not(.has-player) {
+    padding-bottom: var(--safe-area-inset-bottom);
+  }
 }
 
 .mobile-page {
@@ -124,6 +114,8 @@ provide('openPlaylistDrawer', openPlaylistDrawer);
 .mobile-bottom-menu {
   @apply bg-light dark:bg-black;
   @apply border-t border-gray-200 dark:border-gray-800;
+  // 手势条区域留白，避免菜单项被系统手势条压住
+  padding-bottom: var(--safe-area-inset-bottom);
 }
 
 .mobile-menu {

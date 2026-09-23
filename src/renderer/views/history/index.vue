@@ -1,12 +1,17 @@
 <template>
   <div class="history-page h-full flex flex-col">
     <!-- Header Section -->
+    <!-- 注意：这一整段以前挂在 v-if="!isMobile" 上，手机上「歌曲/歌单/专辑/播客」和「本地/云端」
+         两个切换器会一起消失，只剩默认的「本地歌曲」一类，别的记录都进不去。只有标题行需要让步
+         （手机顶部胶囊已经写了「播放历史」），切换器在窄屏上排两行就行。 -->
     <div
-      class="flex flex-col gap-4 px-6 pt-4 pb-2 flex-shrink-0"
-      :class="setAnimationClass('animate__fadeInRight')"
-      v-if="!isMobile"
+      class="flex flex-col flex-shrink-0 pb-2"
+      :class="[
+        setAnimationClass('animate__fadeInRight'),
+        isMobile ? 'gap-2 px-3 pt-2' : 'gap-4 px-6 pt-4'
+      ]"
     >
-      <div class="flex items-center justify-between">
+      <div v-if="!isMobile" class="flex items-center justify-between">
         <h2 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('history.title') }}</h2>
 
         <button
@@ -18,10 +23,11 @@
         </button>
       </div>
 
-      <div class="flex items-center justify-between gap-4">
+      <div class="flex" :class="isMobile ? 'flex-col gap-2' : 'items-center justify-between gap-4'">
         <!-- Category Tabs -->
         <div
-          class="bg-gray-100 dark:bg-neutral-800 p-1 rounded-full inline-flex h-9 items-center overflow-x-auto no-scrollbar max-w-full"
+          class="bg-gray-100 dark:bg-neutral-800 p-1 rounded-full inline-flex h-9 items-center overflow-x-auto no-scrollbar max-w-full min-w-0"
+          :class="isMobile ? 'self-start' : ''"
         >
           <div
             v-for="tab in ['songs', 'playlists', 'albums', 'podcasts']"
@@ -38,32 +44,46 @@
           </div>
         </div>
 
-        <!-- Source Tabs (Local/Cloud) -->
+        <!-- 本地/云端 + 播放全部 -->
         <div
           v-if="currentCategory !== 'podcasts'"
-          class="flex items-center bg-gray-100 dark:bg-neutral-800 rounded-full p-1 h-9 flex-shrink-0"
+          class="flex items-center gap-2 flex-shrink-0"
+          :class="isMobile ? 'self-start' : ''"
         >
+          <div class="flex items-center bg-gray-100 dark:bg-neutral-800 rounded-full p-1 h-9">
+            <button
+              class="px-3 h-7 rounded-full text-xs font-medium transition-all duration-300"
+              :class="
+                currentTab === 'local'
+                  ? 'bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'
+              "
+              @click="handleTabChange('local')"
+            >
+              {{ t('history.tabs.local') }}
+            </button>
+            <button
+              class="px-3 h-7 rounded-full text-xs font-medium transition-all duration-300"
+              :class="
+                currentTab === 'cloud'
+                  ? 'bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm'
+                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'
+              "
+              @click="handleTabChange('cloud')"
+            >
+              {{ t('history.tabs.cloud') }}
+            </button>
+          </div>
+
+          <!-- 播放全部。只有「歌曲」这一类才有意义——歌单/专辑两类列的是歌单和专辑本身 -->
           <button
-            class="px-3 h-7 rounded-full text-xs font-medium transition-all duration-300"
-            :class="
-              currentTab === 'local'
-                ? 'bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'
-            "
-            @click="handleTabChange('local')"
+            v-if="currentCategory === 'songs'"
+            class="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-xs font-semibold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+            :disabled="displayList.length === 0"
+            @click="playAll"
           >
-            {{ t('history.tabs.local') }}
-          </button>
-          <button
-            class="px-3 h-7 rounded-full text-xs font-medium transition-all duration-300"
-            :class="
-              currentTab === 'cloud'
-                ? 'bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'
-            "
-            @click="handleTabChange('cloud')"
-          >
-            {{ t('history.tabs.cloud') }}
+            <i class="ri-play-circle-line text-base"></i>
+            <span>{{ t('comp.musicList.playAll') }}</span>
           </button>
         </div>
       </div>
@@ -266,6 +286,7 @@ import AlbumItem from '@/components/common/AlbumItem.vue';
 import { navigateToMusicList } from '@/components/common/MusicListNavigator';
 import PlaylistItem from '@/components/common/PlaylistItem.vue';
 import SongItem from '@/components/common/SongItem.vue';
+import { fetchSongsByIds, usePlayAll } from '@/hooks/usePlayAll';
 import { usePlayerStore } from '@/store/modules/player';
 import { usePlayHistoryStore } from '@/store/modules/playHistory';
 import { useUserStore } from '@/store/modules/user';
@@ -433,6 +454,8 @@ const handleCategoryChange = async (value: 'songs' | 'playlists' | 'albums' | 'p
   currentPage.value = 1;
   noMore.value = false;
   displayList.value = [];
+  // 换了分类，后台那一轮补齐作废
+  cancelPlayAll();
 
   if (value === 'podcasts') {
     currentTab.value = 'local';
@@ -634,10 +657,43 @@ const handleScroll = (e: any) => {
   }
 };
 
-// 播放全部
+// 单曲点击：把自己的曲子挂成播放列表，真正的 setPlay 由列表项自己发
 const handlePlay = () => {
   playerStore.setPlayList(displayList.value);
 };
+
+/**
+ * 完整的历史歌曲列表（不经过分页）。合并方式跟 loadHistoryData 对齐：
+ * 本地曲目直接用历史记录里的数据，网易云的按 id 批量取详情后按原顺序插回去。
+ */
+const loadAllHistorySongs = async (): Promise<SongResult[]> => {
+  const all = getCurrentList();
+  if (all.length === 0) return [];
+
+  const isLocalItem = (item: any) =>
+    !!item.playMusicUrl?.startsWith('local://') || typeof item.id === 'string';
+
+  const neteaseIds = all
+    .filter((item) => !isLocalItem(item) && item.source !== 'bilibili')
+    .map((item) => item.id as number);
+
+  const neteaseSongs = await fetchSongsByIds(neteaseIds);
+  const byId = new Map(neteaseSongs.map((song) => [String(song.id), song]));
+
+  return all
+    .map((item) => {
+      if (isLocalItem(item)) return item as SongResult;
+      const song = byId.get(String(item.id));
+      return song ? { ...song, count: item.count || 0 } : undefined;
+    })
+    .filter((song): song is SongResult => !!song);
+};
+
+// 播放全部：先用已加载的立刻开播，完整列表在后台补进来
+const { playAll, cancel: cancelPlayAll } = usePlayAll({
+  getLoaded: () => displayList.value,
+  loadAll: loadAllHistorySongs
+});
 
 // 处理 tab 切换
 const handleTabChange = async (value: 'local' | 'cloud') => {
@@ -645,6 +701,8 @@ const handleTabChange = async (value: 'local' | 'cloud') => {
   currentPage.value = 1;
   noMore.value = false;
   displayList.value = [];
+  // 换了本地/云端，后台那一轮补齐作废
+  cancelPlayAll();
 
   // 如果切换到云端，且还没有加载对应的云端数据，则加载
   if (value === 'cloud') {

@@ -2,6 +2,7 @@ import { computed } from 'vue';
 
 import { useSettingsStore } from '@/store';
 import type { Platform } from '@/types/music';
+import { isElectron } from '@/utils';
 
 // ==================== 类型定义 ====================
 
@@ -17,6 +18,14 @@ export type MusicSourceMeta = {
 export type MusicSourceInfo = MusicSourceMeta & {
   available: boolean;
   configHint?: string;
+  /**
+   * 当前平台能不能用它。
+   *
+   * 跟 `available` 是两回事：`available` 说的是「配置好了没」（lxMusic / custom 未配置时
+   * 为 false，点了会提示并跳到对应 tab），`supported` 说的是「这个平台有没有这条链路」。
+   * unblock 那一组挂在主进程的解锁服务上，Web / Android 没有主进程，选了也不会生效。
+   */
+  supported: boolean;
 };
 
 // ==================== 静态注册表 ====================
@@ -44,7 +53,11 @@ export const useMusicSources = () => {
       let available = true;
       let configHint: string | undefined;
 
-      if (source.key === 'lxMusic') {
+      // 内置解锁音源只存在于桌面端（见 musicParser.ts 里 UnblockMusicStrategy.canHandle）
+      const supported = source.group !== 'unblock' || isElectron;
+      if (!supported) {
+        configHint = 'settings.playback.desktopOnly';
+      } else if (source.key === 'lxMusic') {
         available =
           (settingsStore.setData.lxMusicScripts?.length ?? 0) > 0 &&
           Boolean(settingsStore.setData.activeLxMusicApiId);
@@ -54,7 +67,7 @@ export const useMusicSources = () => {
         if (!available) configHint = 'settings.playback.customApi.notImported';
       }
 
-      return { ...source, available, configHint };
+      return { ...source, available, configHint, supported };
     });
   });
 

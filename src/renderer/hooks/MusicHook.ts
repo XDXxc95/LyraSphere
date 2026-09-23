@@ -4,6 +4,7 @@ import { computed, type ComputedRef, nextTick, onUnmounted, ref, watch } from 'v
 
 import useIndexedDB from '@/hooks/IndexDBHook';
 import { audioService } from '@/services/audioService';
+import { initNativeNowPlaying, stopNowPlaying } from '@/services/nativeNowPlaying';
 import type { usePlayerStore } from '@/store';
 import type { Artist, ILyricText, SongResult } from '@/types/music';
 import { isElectron } from '@/utils';
@@ -30,6 +31,57 @@ export const initMusicHook = (store: ReturnType<typeof usePlayerStore>) => {
   setupMusicWatchers();
   setupCorrectionTimeWatcher();
   setupPlayStateWatcher();
+
+  // Android 通知栏 / 锁屏 / 耳机按键的控制指令。非原生环境是 no-op。
+  // 这里注册而不是放进 initAudioListeners：后者在「当前没有播放歌曲」时会提前返回，
+  // 而通知栏的播放键恰恰需要在这种状态下也能接住。
+
+  /**
+   * 恢复播放。不能只调 handleMediaPlay()，按「点播放键」那套完整流程走才行。
+   *
+   * 这条路的失败是静默的：howler 的 Sound.play() 在内部状态被上一次被中断的播放弄脏之后
+   * （_ended=true、_playLock 卡住、元素 readyState 掉下 3），会拐去「新建实例从头播」或
+   * 「挂 canplaythrough 干等」的岔路，甚至什么都不做——它既不抛错也不发事件。
+   * 而播放态同步回 store 全靠事件，于是 store 从头到尾不知道用户按过播放，
+   * playerCore.checkPlaybackState 里那两处 `userPlayIntent && play` 判断全不成立，
+   * 重取 URL 重播的兜底永远不会触发。
+   *
+   * 所以先把「用户想播放」立起来（setPlayMusic 内部就是 setIsPlay + userPlayIntent），
+   * 再起播，最后挂兜底——顺序不能和 handleMediaPlay 调换。
+   */
+  const resumePlayback = () => {
+    const store = getPlayerStore();
+    if (!store.playMusic?.id) {
+      audioService.handleMediaPlay();
+      return;
+    }
+
+    void store.setPlayMusic(true);
+    audioService.handleMediaPlay();
+    store.checkPlaybackState(store.playMusic);
+  };
+
+  initNativeNowPlaying({
+    onPlay: () => resumePlayback(),
+    onPause: () => {
+      // 有的耳机（或 ROM 的媒体键映射）压根不看播放态，每次按键都送 pause：日志里从暂停
+      // 状态连按七次，原生收到的全是 pause，播放器一动不动。本来就停在暂停上的「暂停」
+      // 没有任何意义，那只能是用户想恢复播放——按 toggle 处理。
+      // 用底层 <audio> 判断，不看原生上报的播放态，只有元素本身不会落后。
+      if (audioService.isMediaActuallyPaused()) {
+        console.log('[MusicHook] 暂停态收到暂停指令，按 toggle 处理为恢复播放');
+        resumePlayback();
+        return;
+      }
+      audioService.handleMediaPause();
+    },
+    onNext: () => getPlayerStore().nextPlay(),
+    onPrev: () => getPlayerStore().prevPlay(),
+    onStop: () => {
+      audioService.stop();
+      stopNowPlaying();
+    }
+  });
 };
 
 // 获取 playerStore 的辅助函数
@@ -995,11 +1047,43 @@ export const initAudioListeners = async () => {
   }
 };
 
+// 同一首歌解析出来的地址要是本身就不能播，重新解析只会拿到同一个地址再失败一次，
+// 于是「解析 → 播放 → 过期 → 解析」无限循环，还每轮弹一条提示。这里按歌曲限制次数。
+const MAX_EXPIRED_RETRY = 2;
+const EXPIRED_RETRY_WINDOW = 30_000; // 超过这个间隔视为新的一轮
+let expiredRetryKey = '';
+let expiredRetryCount = 0;
+let expiredRetryAt = 0;
+
+// 真的播起来了说明恢复成功，清空计数
+audioService.on('play', () => {
+  expiredRetryKey = '';
+  expiredRetryCount = 0;
+});
+
 // 监听URL过期事件，自动重新获取URL并恢复播放
 audioService.on('url_expired', async (expiredTrack) => {
   if (!expiredTrack) return;
 
-  console.log('检测到URL过期事件，准备重新获取URL', expiredTrack.name);
+  const now = Date.now();
+  const key = String(expiredTrack.id ?? expiredTrack.name);
+  if (key === expiredRetryKey && now - expiredRetryAt < EXPIRED_RETRY_WINDOW) {
+    expiredRetryCount++;
+  } else {
+    expiredRetryKey = key;
+    expiredRetryCount = 1;
+  }
+  expiredRetryAt = now;
+
+  if (expiredRetryCount > MAX_EXPIRED_RETRY) {
+    console.warn(`URL过期自动恢复已连续失败 ${MAX_EXPIRED_RETRY} 次，停止重试:`, expiredTrack.name);
+    if (expiredRetryCount === MAX_EXPIRED_RETRY + 1) {
+      message.error('这首歌暂时播放不了，请切换其他歌曲');
+    }
+    return;
+  }
+
+  console.log(`检测到URL过期事件，准备重新获取URL（第${expiredRetryCount}次）`, expiredTrack.name);
 
   try {
     // 使用 handlePlayMusic 重新播放，它会自动处理 URL 获取和状态跟踪

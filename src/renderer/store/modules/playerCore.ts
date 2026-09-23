@@ -315,7 +315,7 @@ export const usePlayerCoreStore = defineStore(
           ''
         )}`;
       }
-      document.title = 'AlgerMusic - ' + title;
+      document.title = 'Lyra Sphere - ' + title;
 
       try {
         // 添加到历史记录

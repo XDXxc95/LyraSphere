@@ -35,9 +35,12 @@ export interface ParsedMusicResult {
 export const parseFromGDMusic = async (
   id: number,
   data: any,
-  quality: string = '999',
+  quality: string = 'higher',
   timeout: number = 15000
 ): Promise<ParsedMusicResult | null> => {
+  // 应用内的音质名对 GD 没有意义，先翻成它认的 br 档位
+  const br = toGDBr(quality);
+
   // 创建一个超时Promise
   const timeoutPromise = new Promise<null>((_, reject) => {
     setTimeout(() => {
@@ -74,15 +77,17 @@ export const parseFromGDMusic = async (
           throw new Error('搜索查询过短');
         }
 
-        // 所有可用的音乐源 netease、joox、tidal
-        const allSources = ['joox', 'tidal', 'netease'] as MusicSourceType[];
+        // 依次尝试的音源。netease 排最前是有实测依据的：joox 搜索能出结果但取流恒返回
+        // `{"url":""}`，tidal 直接回 `Value of source is not supported`，只有 netease 真能拿到地址。
+        // 排在后面只是让每次解析多走两个必然失败的请求。
+        const allSources = ['netease', 'joox', 'tidal'] as MusicSourceType[];
 
         console.log('GD音乐台开始搜索:', searchQuery);
 
         // 依次尝试所有音源
         for (const source of allSources) {
           try {
-            const result = await searchAndGetUrl(source, searchQuery, quality);
+            const result = await searchAndGetUrl(source, searchQuery, br);
             if (result) {
               console.log(`GD音乐台成功通过 ${result.source} 解析音乐!`);
               // 返回符合原API格式的数据
@@ -133,6 +138,27 @@ interface GDMusicUrlResult {
 }
 
 const baseUrl = 'https://music-api.gdstudio.xyz/api.php';
+
+/**
+ * 应用内音质 → GD 音乐台的 br 档位。
+ *
+ * GD 只认 128/320/740/999 四档（实测四个都返回可播地址），传别的值拿不到东西。
+ * 应用里有 standard…jymaster 九个档位是网易云的叫法，这里按听感近似折算。
+ */
+const QUALITY_TO_GD_BR: Record<string, string> = {
+  standard: '128',
+  higher: '320',
+  exhigh: '320',
+  lossless: '740',
+  hires: '999',
+  jyeffect: '999',
+  sky: '999',
+  dolby: '999',
+  jymaster: '999'
+};
+
+/** 默认 320：移动端按 999 取到的是 40MB 的 FLAC，流量代价太大 */
+export const toGDBr = (quality?: string): string => QUALITY_TO_GD_BR[quality || ''] || '320';
 
 /**
  * 在指定音源搜索歌曲并获取URL

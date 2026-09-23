@@ -4,7 +4,6 @@
       <n-dialog-provider>
         <n-message-provider>
           <router-view></router-view>
-          <traffic-warning-drawer v-if="!isElectron"></traffic-warning-drawer>
         </n-message-provider>
       </n-dialog-provider>
     </n-config-provider>
@@ -18,12 +17,12 @@ import { computed, nextTick, onMounted, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 
-import TrafficWarningDrawer from '@/components/TrafficWarningDrawer.vue';
 import { usePlayerStore } from '@/store/modules/player';
 import { usePlayerCoreStore } from '@/store/modules/playerCore';
 import { useSettingsStore } from '@/store/modules/settings';
 import { useUserStore } from '@/store/modules/user';
 import { isElectron, isLyricWindow } from '@/utils';
+import { initAndroidBack } from '@/utils/androidBack';
 import { checkLoginStatus } from '@/utils/auth';
 
 import { initAudioListeners, initMusicHook } from './hooks/MusicHook';
@@ -138,6 +137,8 @@ onMounted(async () => {
 
   // 初始化 MusicHook，注入 playerStore
   initMusicHook(playerStore);
+  // 接管 Android 返回键：先退浮层 / 退页面，只在主页面才真的退出
+  initAndroidBack(router);
   // 初始化播放状态
   await playerStore.initializePlayState();
 

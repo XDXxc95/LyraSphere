@@ -23,7 +23,9 @@
       </div>
 
       <!-- Tab Content -->
-      <div class="h-[400px] relative shrink-0">
+      <!-- 手机上这个弹窗是底部抽屉（见 ResponsiveModal），固定 400px 加上 tab 和 footer
+           在小屏上会顶出可滚动区，所以再压一道视口高度 -->
+      <div class="h-[400px] max-h-[55vh] relative shrink-0">
         <Transition name="fade" mode="out-in">
           <div :key="activeTab" class="h-full overflow-y-auto overscroll-contain">
             <!-- Sources Tab -->
@@ -41,7 +43,7 @@
                     isSourceSelected(source.key)
                       ? 'bg-emerald-50/50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20'
                       : 'bg-white dark:bg-white/5 border-gray-100 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/10',
-                    { 'opacity-60 cursor-not-allowed': !source.available }
+                    { 'opacity-60 cursor-not-allowed': !source.available || !source.supported }
                   ]"
                   @click="toggleSource(source.key)"
                 >
@@ -75,9 +77,17 @@
                         ></i>
                       </div>
                     </div>
+                    <!-- 平台不支持（如手机端的 migu/kugou）：置灰并说明原因，
+                         否则用户点了没反应会以为坏了 -->
+                    <p
+                      v-if="!source.supported && source.configHint"
+                      class="text-[10px] text-gray-500 mt-0.5 truncate"
+                    >
+                      {{ t(source.configHint) }}
+                    </p>
                     <!-- lxMusic 子描述 -->
                     <p
-                      v-if="source.key === 'lxMusic'"
+                      v-else-if="source.key === 'lxMusic'"
                       class="text-[10px] text-gray-500 mt-0.5 truncate"
                     >
                       {{
@@ -108,7 +118,10 @@
                 <h3 class="text-xs font-medium text-gray-500 dark:text-gray-400">
                   {{ t('settings.playback.lxMusic.scripts.title') }}
                 </h3>
+                <!-- 本地导入走的是主进程的文件选择对话框（window.api.importLxMusicScript），
+                     Web / Android 上没有 window.api。下面那个 URL 导入是纯 fetch，两端都能用 -->
                 <button
+                  v-if="isElectron"
                   @click="importLxMusicScript"
                   class="flex items-center gap-1 px-2.5 py-1 bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium rounded-lg transition-colors"
                 >
@@ -218,45 +231,105 @@
             </div>
 
             <!-- Custom API Tab -->
-            <div
-              v-else-if="activeTab === 'customApi'"
-              class="flex flex-col items-center justify-center py-6 text-center h-full"
-            >
-              <div
-                class="w-12 h-12 bg-violet-100 dark:bg-violet-500/20 text-violet-500 rounded-xl flex items-center justify-center mb-3"
-              >
-                <i class="ri-plug-fill text-2xl"></i>
-              </div>
-
-              <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-1">
-                {{ t('settings.playback.customApi.sectionTitle') }}
-              </h3>
-              <p class="text-gray-500 dark:text-gray-400 text-xs mb-4 max-w-xs mx-auto">
-                {{ t('settings.playback.lxMusic.scripts.importHint') }}
-              </p>
-
-              <button
-                @click="importPlugin"
-                class="px-5 py-2 bg-violet-500 hover:bg-violet-600 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2 shadow-lg shadow-violet-500/20"
-              >
-                <i class="ri-upload-line"></i>
-                {{ t('settings.playback.customApi.importConfig') }}
-              </button>
-
+            <div v-else-if="activeTab === 'customApi'" class="space-y-3 pb-2">
+              <!-- 当前生效的音源。放在最上面，改完立刻能看到结果 -->
               <div
                 v-if="settingsStore.setData.customApiPluginName"
-                class="mt-4 flex items-center gap-2 px-3 py-1.5 bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 rounded-lg text-xs"
+                class="flex items-center gap-2 px-3 py-2 bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 rounded-xl text-xs"
               >
-                <i class="ri-check-circle-fill"></i>
-                <span
+                <i class="ri-check-circle-fill shrink-0"></i>
+                <span class="truncate"
                   >{{ t('settings.playback.customApi.currentSource') }}:
                   <b>{{ settingsStore.setData.customApiPluginName }}</b></span
                 >
               </div>
 
-              <div v-else class="mt-4 text-xs text-gray-400">
+              <div
+                v-else
+                class="px-3 py-2 text-xs text-gray-400 bg-gray-50 dark:bg-white/5 rounded-xl"
+              >
                 {{ t('settings.playback.customApi.notImported') }}
               </div>
+
+              <!-- 桌面端：从本地挑一个 JSON 配置文件 -->
+              <template v-if="isElectron">
+                <div class="flex flex-col items-center pt-2 text-center">
+                  <div
+                    class="w-12 h-12 bg-violet-100 dark:bg-violet-500/20 text-violet-500 rounded-xl flex items-center justify-center mb-3"
+                  >
+                    <i class="ri-plug-fill text-2xl"></i>
+                  </div>
+                  <h3 class="text-base font-semibold text-gray-900 dark:text-white mb-1">
+                    {{ t('settings.playback.customApi.sectionTitle') }}
+                  </h3>
+                  <p class="text-gray-500 dark:text-gray-400 text-xs mb-4 max-w-xs">
+                    {{ t('settings.playback.lxMusic.scripts.importHint') }}
+                  </p>
+                </div>
+
+                <button
+                  @click="importPlugin"
+                  class="w-full py-2 bg-violet-500 hover:bg-violet-600 text-white text-sm font-medium rounded-xl transition-colors flex items-center justify-center gap-2 shadow-lg shadow-violet-500/20"
+                >
+                  <i class="ri-upload-line"></i>
+                  {{ t('settings.playback.customApi.importConfig') }}
+                </button>
+              </template>
+
+              <!-- Web / Android：没有主进程也就没有 window.api，文件选择框调不出来。
+                   改成填一个远程地址，或者直接把 JSON 粘进来 —— 手机上后者最实在 -->
+              <template v-else>
+                <div>
+                  <h4 class="text-xs font-medium mb-2 text-gray-900 dark:text-white">
+                    {{ t('settings.playback.customApi.importFromUrl') }}
+                  </h4>
+                  <div class="flex gap-2">
+                    <input
+                      v-model="customApiUrl"
+                      :placeholder="t('settings.playback.customApi.urlPlaceholder')"
+                      class="flex-1 min-w-0 px-3 py-1.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs focus:outline-none focus:border-violet-500 transition-colors"
+                      :disabled="isImportingCustomApi"
+                    />
+                    <button
+                      @click="importCustomApiFromUrl"
+                      class="px-3 py-1.5 bg-violet-500 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium rounded-xl transition-colors flex items-center gap-1 shrink-0"
+                      :disabled="!customApiUrl.trim() || isImportingCustomApi"
+                    >
+                      <i v-if="isImportingCustomApi" class="ri-loader-4-line animate-spin"></i>
+                      <i v-else class="ri-download-line"></i>
+                      {{ t('settings.playback.lxMusic.scripts.importBtn') }}
+                    </button>
+                  </div>
+                </div>
+
+                <div class="pt-3 border-t border-gray-100 dark:border-white/5">
+                  <h4 class="text-xs font-medium mb-2 text-gray-900 dark:text-white">
+                    {{ t('settings.playback.customApi.pasteJson') }}
+                  </h4>
+                  <textarea
+                    v-model="customApiJson"
+                    rows="7"
+                    spellcheck="false"
+                    :placeholder="t('settings.playback.customApi.jsonPlaceholder')"
+                    class="w-full px-3 py-2 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 rounded-xl text-xs font-mono focus:outline-none focus:border-violet-500 transition-colors resize-none"
+                  ></textarea>
+                  <div class="flex justify-end gap-2 mt-2">
+                    <button
+                      class="px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors"
+                      @click="resetCustomApiPreset"
+                    >
+                      {{ t('settings.playback.customApi.resetPreset') }}
+                    </button>
+                    <button
+                      class="px-3 py-1.5 bg-violet-500 hover:bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium rounded-xl transition-colors"
+                      :disabled="!customApiJson.trim()"
+                      @click="applyCustomApiJson"
+                    >
+                      {{ t('settings.playback.customApi.apply') }}
+                    </button>
+                  </div>
+                </div>
+              </template>
             </div>
           </div>
         </Transition>
@@ -289,6 +362,7 @@ import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import ResponsiveModal from '@/components/common/ResponsiveModal.vue';
+import { PRESET_CUSTOM_API_PLUGIN } from '@/const/music-source-preset';
 import {
   initLxMusicRunner,
   parseScriptInfo,
@@ -297,6 +371,7 @@ import {
 import { useSettingsStore } from '@/store';
 import type { LxMusicScriptConfig, LxScriptInfo, LxSourceKey } from '@/types/lxMusic';
 import { type Platform } from '@/types/music';
+import { isElectron } from '@/utils';
 import { useMusicSources } from '@/utils/musicSourceConfig';
 
 // ==================== Props & Emits ====================
@@ -356,6 +431,11 @@ const lxMusicScriptInfo = computed<LxScriptInfo | null>(() => {
 const lxScriptUrl = ref('');
 const isImportingFromUrl = ref(false);
 
+// 自定义音源相关状态（仅非 Electron 用得上：桌面端走文件选择框）
+const customApiUrl = ref('');
+const isImportingCustomApi = ref(false);
+const customApiJson = ref('');
+
 // 重命名相关状态
 const editingScriptId = ref<string | null>(null);
 const editingName = ref('');
@@ -366,11 +446,27 @@ const isSourceSelected = (sourceKey: string): boolean => {
   return selectedSources.value.includes(sourceKey as Platform);
 };
 
+/**
+ * 摘掉当前平台跑不了的音源。
+ *
+ * 存量配置里带着 migu/kugou 这些（set.json 的默认值），在手机上它们不会生效，
+ * 留着只会在设置页的「已选音源」那行里显示成一串没用的名字。
+ */
+const dropUnsupportedSources = (sources: Platform[]): Platform[] =>
+  sources.filter(
+    (key) => allSources.value.find((source) => source.key === key)?.supported !== false
+  );
+
 // ==================== 方法 ====================
 /**
  * 切换音源选择状态
  */
 const toggleSource = (sourceKey: string) => {
+  // 当前平台没有这条链路（手机端的 migu/kugou/kuwo/pyncmd）：置灰只是视觉，
+  // 不挡住的话点下去照样会改 selectedSources，用户以为选上了其实没生效
+  const meta = allSources.value.find((source) => source.key === sourceKey);
+  if (meta && !meta.supported) return;
+
   // 检查是否是自定义API且未导入
   if (sourceKey === 'custom' && !settingsStore.setData.customApiPlugin) {
     message.warning(t('settings.playback.customApi.enableHint'));
@@ -403,6 +499,90 @@ const toggleSource = (sourceKey: string) => {
   } else {
     selectedSources.value.push(sourceKey as Platform);
   }
+};
+
+/**
+ * 校验一段文本是不是能用的自定义音源配置。
+ *
+ * 必填项跟 parseFromCustomApi 里的判定保持一致（apiUrl / params / responseUrlPath），
+ * 那边才是真正消费它的地方，这里只是提前把错误拦下来给个提示。
+ */
+const parseCustomApiPlugin = (raw: string): Record<string, any> | null => {
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (!parsed.apiUrl || !parsed.params || !parsed.responseUrlPath) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * 应用一份自定义音源配置（粘贴进来的、或从 URL 下下来的）。
+ * @param raw 配置文本
+ * @param fallbackName 配置里没写 name 时用它顶替
+ */
+const applyCustomApiPlugin = (raw: string, fallbackName: string): boolean => {
+  const plugin = parseCustomApiPlugin(raw);
+  if (!plugin) {
+    message.error(t('settings.playback.customApi.invalidJson'));
+    return false;
+  }
+
+  const name = plugin.name || fallbackName;
+  // 存归一化后的 JSON，用户回到这个 tab 时看到的是排好版的，而不是他粘进来的原始文本
+  settingsStore.setCustomApiPlugin({ name, content: JSON.stringify(plugin, null, 2) });
+
+  // 配好了就顺手勾上，省得用户还得回音源选择 tab 再点一次
+  if (!selectedSources.value.includes('custom')) {
+    selectedSources.value.push('custom');
+  }
+
+  message.success(t('settings.playback.customApi.importSuccess', { name }));
+  return true;
+};
+
+/** 从 URL 拉一份自定义音源配置 */
+const importCustomApiFromUrl = async () => {
+  const url = customApiUrl.value.trim();
+  if (!url) return;
+
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    message.error(t('settings.playback.lxMusic.scripts.invalidUrl'));
+    return;
+  }
+
+  isImportingCustomApi.value = true;
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    if (applyCustomApiPlugin(await response.text(), host)) {
+      customApiUrl.value = '';
+    }
+  } catch (error: any) {
+    console.error('[MusicSourceSettings] 从 URL 导入自定义音源失败:', error);
+    message.error(
+      `${t('settings.playback.customApi.importFromUrl')} ${t('common.error')}：${error.message}`
+    );
+  } finally {
+    isImportingCustomApi.value = false;
+  }
+};
+
+/** 应用粘贴框里的 JSON */
+const applyCustomApiJson = () => {
+  applyCustomApiPlugin(customApiJson.value, 'Custom API');
+};
+
+/** 恢复成内置的预置音源 */
+const resetCustomApiPreset = () => {
+  applyCustomApiPlugin(JSON.stringify(PRESET_CUSTOM_API_PLUGIN), PRESET_CUSTOM_API_PLUGIN.name);
 };
 
 /**
@@ -652,11 +832,14 @@ const saveScriptName = (apiId: string) => {
 /**
  * 确认选择
  */
+/**
+ * 一个音源都没选时的兜底。不能拿内置那四个当默认——非桌面端它们压根不生效，勾了等于没勾。
+ */
+const DEFAULT_PLATFORMS: Platform[] = isElectron ? ['migu', 'kugou', 'kuwo', 'pyncmd'] : ['custom'];
+
 const handleConfirm = () => {
-  const defaultPlatforms: Platform[] = ['migu', 'kugou', 'kuwo', 'pyncmd'];
-  const valuesToEmit =
-    selectedSources.value.length > 0 ? [...new Set(selectedSources.value)] : defaultPlatforms;
-  emit('update:sources', valuesToEmit);
+  const selected = dropUnsupportedSources([...new Set(selectedSources.value)]);
+  emit('update:sources', selected.length > 0 ? selected : DEFAULT_PLATFORMS);
   visible.value = false;
 };
 
@@ -664,7 +847,7 @@ const handleConfirm = () => {
  * 取消选择
  */
 const handleCancel = () => {
-  selectedSources.value = [...props.sources];
+  selectedSources.value = dropUnsupportedSources([...props.sources]);
   visible.value = false;
 };
 
@@ -713,13 +896,32 @@ watch(
   }
 );
 
-// 同步外部sources属性变化
+// 同步外部sources属性变化。immediate 让初值也过一遍过滤——初始值直接来自
+// props.sources，里面可能带着非桌面端用不了的音源
 watch(
   () => props.sources,
   (newVal: Platform[]) => {
-    selectedSources.value = [...newVal];
+    selectedSources.value = dropUnsupportedSources([...newVal]);
   },
-  { deep: true }
+  { deep: true, immediate: true }
+);
+
+// 把当前配置灌进粘贴框，用户可以直接在上面改。用户打字不会触发这里
+// （文本框不写回 store），只有真的换了配置——URL 导入、恢复预置、应用——才会重排
+watch(
+  () => settingsStore.setData.customApiPlugin as string | undefined,
+  (content) => {
+    if (!content) {
+      customApiJson.value = '';
+      return;
+    }
+    try {
+      customApiJson.value = JSON.stringify(JSON.parse(content), null, 2);
+    } catch {
+      customApiJson.value = content;
+    }
+  },
+  { immediate: true }
 );
 </script>
 

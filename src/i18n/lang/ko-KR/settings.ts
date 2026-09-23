@@ -9,7 +9,6 @@ export default {
     application: '애플리케이션 설정',
     network: '네트워크 설정',
     system: '시스템 관리',
-    donation: '후원 지원',
     about: '정보'
   },
   basic: {
@@ -78,6 +77,9 @@ export default {
     },
     musicSources: '음원 설정',
     musicSourcesDesc: '음악 해석에 사용할 음원 플랫폼 선택',
+    neteaseApiUrl: 'Netease API 주소',
+    neteaseApiUrlDesc: '검색과 곡 상세에 사용됩니다. 비워 두면 내장 기본값을 사용합니다',
+    desktopOnly: '데스크톱 전용',
     musicSourcesWarning: '최소 하나의 음원 플랫폼을 선택해야 합니다',
     musicUnblockEnable: '음악 해석 활성화',
     musicUnblockEnableDesc: '활성화하면 재생할 수 없는 음악을 해석하려고 시도합니다',
@@ -117,6 +119,14 @@ export default {
       sectionTitle: '사용자 지정 API 설정',
       importConfig: 'JSON 설정 가져오기',
       currentSource: '현재 음원',
+      importFromUrl: 'URL에서 설정 가져오기',
+      urlPlaceholder: '사용자 지정 음원 설정의 URL 입력',
+      pasteJson: 'JSON 설정 붙여넣기',
+      jsonPlaceholder: '여기에 사용자 지정 음원 JSON을 붙여넣으세요',
+      apply: '적용',
+      resetPreset: '프리셋으로 복원',
+      invalidJson:
+        '설정 형식이 올바르지 않습니다: apiUrl, params, responseUrlPath를 포함한 JSON이어야 합니다',
       notImported: '아직 사용자 지정 음원을 가져오지 않았습니다.',
       importSuccess: '음원 가져오기 성공: {name}',
       importFailed: '가져오기 실패: {message}',
@@ -281,6 +291,20 @@ export default {
     gotoGithub: 'Github로 이동',
     author: '작성자',
     authorDesc: 'algerkong 별점🌟 부탁드려요',
+    log: {
+      title: '진단 로그',
+      file: '로그 파일',
+      fileDesc:
+        '재생 경로, 오디오 포커스, 네이티브 서비스 상태를 기록합니다. 문제 보고 시 내보내 주세요.',
+      openFolder: '내보내고 열기',
+      share: '공유',
+      clear: '로그 지우기',
+      clearDesc: '현재 로그 파일을 삭제하고 다음 재현부터 다시 기록합니다',
+      opened: '{path}에 내보냈습니다',
+      openFailed: '폴더를 열 수 없습니다. 공유로 내보내 주세요',
+      shareFailed: '공유 실패',
+      cleared: '로그를 지웠습니다'
+    },
     messages: {
       checkError: '업데이트 확인 실패, 나중에 다시 시도하세요'
     }

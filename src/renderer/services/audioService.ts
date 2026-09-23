@@ -1,8 +1,15 @@
+import { Capacitor } from '@capacitor/core';
 import { Howl, Howler } from 'howler';
 
 import type { AudioOutputDevice } from '@/types/audio';
 import type { SongResult } from '@/types/music';
-import { isElectron } from '@/utils'; // 导入isElectron常量
+import { getImgUrl, isElectron, toPlayableUrl } from '@/utils'; // 导入isElectron常量
+
+import {
+  updateNowPlayingMetadata,
+  updateNowPlayingPlayback,
+  updateNowPlayingPosition
+} from './nativeNowPlaying';
 
 class AudioService {
   private currentSound: Howl | null = null;
@@ -56,6 +63,20 @@ class AudioService {
   private operationLockStartTime: number = 0;
   private operationLockId: string = '';
 
+  // ------------------------------------------------------------ 媒体会话状态核对
+  //
+  // 通知栏的进度条是按原生 PlaybackState 的 rate 外推出来的：只要上报过「在播」，
+  // 它就自己往前跑，没人纠正就一直跑。所以「在播」必须是 <audio> 真的在响，
+  // 不能是 howler 自己的记账（它只知道自己调没调过 play）。
+  /** 最近一次上报给媒体会话的播放态 */
+  private sessionPlayingReported = false;
+  /** 核对定时器，只在「报着在播」时运行 */
+  private playStateWatchdog: number | null = null;
+  /** 连续几次核对都对不上才纠正，避免和刚发出的 play() 抢跑 */
+  private playProbeMisses = 0;
+  private readonly playProbeIntervalMs = 1000;
+  private readonly playProbeMissesToFix = 2;
+
   constructor() {
     if ('mediaSession' in navigator) {
       this.initMediaSession();
@@ -73,13 +94,19 @@ class AudioService {
     });
   }
 
+  // 原生平台（Android）用 NowPlayingService 提供的系统媒体会话，
+  // WebView 里的 navigator.mediaSession 没有 UI 载体，两边都注册只会互相抢媒体按键
+  private readonly isNativePlatform = Capacitor.isNativePlatform();
+
   private initMediaSession() {
+    if (this.isNativePlatform) return;
+
     navigator.mediaSession.setActionHandler('play', () => {
-      this.currentSound?.play();
+      this.handleMediaPlay();
     });
 
     navigator.mediaSession.setActionHandler('pause', () => {
-      this.currentSound?.pause();
+      this.handleMediaPause();
     });
 
     navigator.mediaSession.setActionHandler('stop', () => {
@@ -118,14 +145,82 @@ class AudioService {
     });
   }
 
-  private updateMediaSessionMetadata(track: SongResult) {
-    try {
-      if (!('mediaSession' in navigator)) return;
+  /**
+   * 播放 / 暂停的统一入口，Web MediaSession 与 Android 通知栏共用这一份实现，
+   * 避免两条路径的逻辑漂移。
+   * 都先判一次当前状态：Chromium 和原生侧都可能同时收到同一次焦点变化，
+   * 重复调用 howler 的 play() 会多起一个音源实例。
+   */
+  /**
+   * 返回值表示「这条链路能不能自己处理」：false 时调用方应当走 store 那条完整播放链路。
+   */
+  public handleMediaPlay(): boolean {
+    const sound = this.currentSound;
+    const node = this.nodeOf(sound);
 
-      const artists = track.ar
-        ? track.ar.map((a) => a.name)
-        : track.song.artists?.map((a) => a.name);
-      const album = track.al ? track.al.name : track.song.album.name;
+    // 用底层 <audio> 判断，而不是 howler 的 playing()：被外部掐断之后（应用内 MV / 直播
+    // 抢走音频焦点、系统打断）howler 仍然认为自己在播，`!playing()` 不成立，
+    // 这里就什么都不做，通知栏的播放键成了摆设。以 DOM 为准，只有真的在响才跳过。
+    if (sound && node && !node.paused && !node.ended) return true;
+
+    if (!sound) {
+      // App 重建 / WebView 被回收之后到这里是没有实例的，这条链路造不出播放，
+      // 如实交出去让 store 重新走一遍解析 + 起播。
+      console.warn('[audioService] 收到恢复播放指令，但没有音频实例，交给上层重建播放链路');
+      return false;
+    }
+
+    // 这里刻意不复用 isSoundActuallyPlaying()：它把「取不到节点」当成「在播」，
+    // 那是给状态核对用的保守判断，放在这里就成了「拿不到节点就永远不起播」。
+    const raw = sound as any;
+    console.log(
+      `[audioService] 恢复播放: node=${!!node} paused=${node?.paused} ended=${node?.ended}` +
+        ` readyState=${node?.readyState} networkState=${node?.networkState}` +
+        ` howlerPlaying=${sound.playing()} playLock=${raw._playLock} state=${raw._state}` +
+        ` sndPaused=${raw._sounds?.[0]?._paused} sndEnded=${raw._sounds?.[0]?._ended}`
+    );
+
+    sound.play();
+    return true;
+  }
+
+  public handleMediaPause() {
+    if (this.currentSound?.playing()) {
+      this.currentSound.pause();
+    }
+  }
+
+  /**
+   * 底层 `<audio>` 是否确实停着（暂停 / 已结束 / 节点还没建出来）。
+   *
+   * 给「暂停态又收到 pause」那条兜底用。这里刻意不读 howler 的 playing()，
+   * 也不读原生上报的播放态：只有元素本身的状态不会落后。
+   */
+  public isMediaActuallyPaused(): boolean {
+    const node = this.nodeOf(this.currentSound);
+    return !node || node.paused || node.ended;
+  }
+
+  private updateMediaSessionMetadata(track: SongResult) {
+    const artists = track.ar ? track.ar.map((a) => a.name) : track.song.artists?.map((a) => a.name);
+    const album = track.al ? track.al.name : track.song.album.name;
+
+    // 原生平台的通知栏只需要一张最大尺寸的封面。
+    // 只有 http(s) 的绝对地址才传过去：原生侧是自己拿 HttpURLConnection 去下的，
+    // 内置兜底封面那种相对路径（/images/default_cover.png）和 local:// 它都够不着，
+    // 传过去只是白跑一趟并让日志里多一条“下载失败”。传空则会退到应用图标兜底。
+    const cover =
+      track.picUrl && /^https?:/i.test(track.picUrl) ? getImgUrl(track.picUrl, '512y512') : '';
+    updateNowPlayingMetadata({
+      title: track.name || '',
+      artist: artists ? artists.join(',') : '',
+      album: album || '',
+      cover
+    });
+
+    try {
+      if (!('mediaSession' in navigator) || this.isNativePlatform) return;
+
       const artwork = ['96', '128', '192', '256', '384', '512'].map((size) => ({
         src: `${track.picUrl}?param=${size}y${size}`,
         type: 'image/jpg',
@@ -144,21 +239,137 @@ class AudioService {
     }
   }
 
-  private updateMediaSessionState(isPlaying: boolean) {
-    if (!('mediaSession' in navigator)) return;
+  /**
+   * 把播放态同步给媒体会话（原生通知栏 / Web MediaSession）。
+   *
+   * 上报「在播」之前会拿底层 `<audio>` 复核一次：howler 的 play 事件、调用方的判断，
+   * 说的都只是「调了 play()」，元素有没有真的响起来是另一回事——同页面的 `<video>`
+   * （应用内 MV / 直播）抢走播放、系统打断，都会让元素停在 paused。
+   *
+   * 原生通知栏的进度条按 PlaybackState 的 rate 外推，一旦把假的「在播」报上去，
+   * 它就自己往前跑，而这时往往一个事件都不会再有（元素既没起来、也没有 pause 事件），
+   * 于是通知栏永远显示播放、时间一直涨。所以这里以 DOM 为准，复核不过就按暂停报。
+   *
+   * 只纠正「报给媒体会话」的这一份，不改 store、不派发事件——「这次到底起没起来、
+   * 要不要重试」由 playerCore 的 checkPlaybackState 负责，两边各管各的，不互相打架。
+   */
+  private updateMediaSessionState(isPlaying: boolean, sound: Howl | null = this.currentSound) {
+    let effective = isPlaying;
+    if (isPlaying && !this.isSoundActuallyPlaying(sound)) {
+      console.warn('[audioService] 请求上报「在播」，但 <audio> 并未真的在播放，改按暂停上报');
+      effective = false;
+    }
 
-    navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    this.sessionPlayingReported = effective;
+
+    // 先推位置、再切播放态，顺序不能反：原生 PlaybackState 里只有 position 和 rate 两个数，
+    // 位置不刷新的话，暂停时进度条会被定位到最后一次同步的位置——而那个值整首歌都停在 0
+    // （只有换歌和 seek 时才推过），看起来就是「一按暂停时间条被清空」；恢复播放也会从 0 重跑。
+    // 反过来先切播放态的话，中间会有一帧「暂停在 0」，进度条要闪一下。
+    this.pushCurrentPosition(true);
+    updateNowPlayingPlayback(effective);
+
+    if (effective) {
+      this.startPlayStateWatchdog();
+    } else {
+      this.stopPlayStateWatchdog();
+    }
+
+    if (!('mediaSession' in navigator) || this.isNativePlatform) return;
+
+    navigator.mediaSession.playbackState = effective ? 'playing' : 'paused';
     this.updateMediaSessionPositionState();
+  }
+
+  /**
+   * 取某个 Howl 底层的 `<audio>` 元素。
+   * html5 模式下 `_sounds[0]._node` 就是真正发声的元素；Web Audio 模式（桌面端开 EQ 走这条）
+   * 是 GainNode，没有 DOM 状态可查，返回 undefined。
+   */
+  private nodeOf(sound: Howl | null | undefined): HTMLMediaElement | undefined {
+    const node = (sound as any)?._sounds?.[0]?._node;
+    return node instanceof HTMLMediaElement ? node : undefined;
+  }
+
+  /**
+   * 把底层 `<audio>` 的当前进度推给媒体会话。
+   * `force` 时跳过节流——播放态切换必须带上准确的位置，等不起。
+   */
+  private pushCurrentPosition(force = false) {
+    if (!this.currentSound) return;
+
+    const position = this.currentSound.seek() as number;
+    if (typeof position !== 'number' || Number.isNaN(position)) return;
+
+    updateNowPlayingPosition(position, this.currentSound.duration() as number, { force });
+  }
+
+  /**
+   * `<audio>` 是否真的在发声。取不到节点时返回 true——宁可不纠正，
+   * 也不要凭着猜测把状态改成暂停。
+   */
+  private isSoundActuallyPlaying(sound: Howl | null | undefined): boolean {
+    const node = this.nodeOf(sound);
+    if (!node) return true;
+    return !node.paused && !node.ended;
+  }
+
+  /**
+   * 看门狗：只要媒体会话还「报着在播」，就每秒拿底层 `<audio>` 复核一次。
+   *
+   * 光靠事件纠正不够。元素被掐断时可能一个事件都没有（同页 `<video>` 占着播放、
+   * 系统把音频停掉而 WebView 没派发事件），而通知栏的进度条不等人。这里不派发任何事件，
+   * 只把媒体会话拉回真实状态。
+   */
+  private startPlayStateWatchdog() {
+    if (this.playStateWatchdog !== null) return;
+
+    this.playStateWatchdog = window.setInterval(() => {
+      if (!this.sessionPlayingReported) {
+        this.stopPlayStateWatchdog();
+        return;
+      }
+
+      const node = this.nodeOf(this.currentSound);
+      // 节点没了 / 媒体被卸载（换歌、stop）不算分歧，换歌流程自己会重报状态
+      if (!node || node.readyState === 0) {
+        this.playProbeMisses = 0;
+        return;
+      }
+      if (!node.paused && !node.ended) {
+        this.playProbeMisses = 0;
+        return;
+      }
+
+      if (++this.playProbeMisses < this.playProbeMissesToFix) return;
+      this.playProbeMisses = 0;
+      console.warn('[audioService] 媒体会话报着在播，但 <audio> 实际没在播放，纠正为暂停');
+      this.updateMediaSessionState(false, this.currentSound);
+    }, this.playProbeIntervalMs);
+  }
+
+  private stopPlayStateWatchdog() {
+    if (this.playStateWatchdog !== null) {
+      window.clearInterval(this.playStateWatchdog);
+      this.playStateWatchdog = null;
+    }
+    this.playProbeMisses = 0;
   }
 
   private updateMediaSessionPositionState() {
     try {
-      if (!this.currentSound || !('mediaSession' in navigator)) return;
+      if (!this.currentSound) return;
+
+      const duration = this.currentSound.duration();
+      const position = this.currentSound.seek() as number;
+      updateNowPlayingPosition(position, duration);
+
+      if (!('mediaSession' in navigator) || this.isNativePlatform) return;
       if ('setPositionState' in navigator.mediaSession) {
         navigator.mediaSession.setPositionState({
-          duration: this.currentSound.duration(),
+          duration,
           playbackRate: this.playbackRate,
-          position: this.currentSound.seek() as number
+          position
         });
       }
     } catch (error) {
@@ -625,7 +836,7 @@ class AudioService {
           } else {
             console.log('audioService: 创建新的 Howl 对象');
             newSound = new Howl({
-              src: [url],
+              src: [toPlayableUrl(url)],
               html5: true,
               autoplay: false,
               volume: 1, // 禁用 Howler.js 音量控制
@@ -658,6 +869,9 @@ class AudioService {
 
             newSound.on('playerror', (_, error) => {
               console.error('Audio play error:', error);
+              // howler 起播失败时只会发 playerror，媒体会话那边还停在上一轮的「在播」上，
+              // 通知栏于是继续显示播放、进度条继续跑。这里如实改成暂停。
+              this.updateMediaSessionState(false, newSound);
               this.emit('playerror', { track, error });
               if (retryCount < maxRetries) {
                 retryCount++;
@@ -782,14 +996,15 @@ class AudioService {
 
             soundInstance.on('play', () => {
               if (this.currentSound === soundInstance) {
-                this.updateMediaSessionState(true);
+                // 带上实例：上报前要拿它自己的 <audio> 复核，热切换期间 currentSound 可能已经换人
+                this.updateMediaSessionState(true, soundInstance);
                 this.emit('play');
               }
             });
 
             soundInstance.on('pause', () => {
               if (this.currentSound === soundInstance) {
-                this.updateMediaSessionState(false);
+                this.updateMediaSessionState(false, soundInstance);
                 this.emit('pause');
               }
             });
@@ -806,6 +1021,8 @@ class AudioService {
                 this.emit('seek');
               }
             });
+
+            this.attachMediaProbe(soundInstance);
           }
         } catch (error) {
           console.error('Error creating audio instance:', error);
@@ -818,6 +1035,102 @@ class AudioService {
     }).finally(() => {
       // 无论成功或失败都解除操作锁
       this.releaseOperationLock();
+    });
+  }
+
+  /** 已挂过 DOM 监听的 <audio> —— howler 的节点是复用池，同一个节点不要重复挂 */
+  private probedNodes = new WeakSet<HTMLMediaElement>();
+
+  /**
+   * DOM 节点 → 当前拥有它的 Howl。
+   *
+   * 节点会被复用池换给下一首，所以判断事件归属必须查这张表，不能在闭包里捕获
+   * Howl——闭包会随着节点被复用而指向上一首，误判成「外部事件」。
+   */
+  private probeOwners = new WeakMap<HTMLMediaElement, Howl>();
+
+  /**
+   * 探针：监听底层 <audio> 的 DOM 事件，一是留排障证据，二是纠正外部造成的播放状态。
+   *
+   * howler 只在它自己调 `pause()` / `play()` 时派发对应事件，DOM 层面被外部掐断或
+   * 续上（Chromium 的音频焦点仲裁、系统打断）它一无所知。不管的话前端状态会停在
+   * 「播放中」，通知栏进度条照常往前跑，而声音早就停了。
+   *
+   * 判断「这次是不是我们干的」以 howler 自己的 `_paused` 为准：howler 发起的那次
+   * 必然已经把状态同步翻过去了，这里就不会再补一刀；只有状态对不上才说明是外部所为。
+   *
+   * 配合 NowPlayingService 侧移除原生焦点（见那边的注释）——焦点交给真正发声的
+   * Chromium 管，打断与恢复如实反映在这些 DOM 事件上，再从这里同步回 store 和通知栏。
+   */
+  private attachMediaProbe(howl: Howl) {
+    // html5 模式下 _node 是 <audio>；Web Audio 模式下是 GainNode，没有 DOM 事件可听
+    const node = this.nodeOf(howl);
+    if (!node) {
+      console.log('audioService: 未取得 <audio> 节点，跳过 DOM 探针');
+      return;
+    }
+
+    // 每次都刷新归属，即使监听已经挂过——节点可能刚被换给新的一首
+    this.probeOwners.set(node, howl);
+    if (this.probedNodes.has(node)) return;
+    this.probedNodes.add(node);
+
+    console.log('audioService: DOM 探针已挂载');
+
+    /** 事件是不是来自当前正在播（或正要切过去）的那一首 */
+    const isCurrent = () => {
+      const owner = this.probeOwners.get(node);
+      return owner === this.currentSound || owner === this.pendingSound;
+    };
+
+    const snapshot = (name: string) =>
+      `[audio-dom] ${name} paused=${node.paused} t=${node.currentTime.toFixed(2)} ` +
+      `readyState=${node.readyState} networkState=${node.networkState}`;
+
+    (['playing', 'waiting', 'stalled', 'suspend', 'emptied', 'abort', 'ended'] as const).forEach(
+      (name) => {
+        node.addEventListener(name, () => console.log(snapshot(name)));
+      }
+    );
+
+    // 每次换源都记下 URL，出问题时才能把失败的那一首和地址对上
+    node.addEventListener('loadstart', () => {
+      console.log(`[audio-dom] loadstart src=${node.src}`);
+    });
+
+    node.addEventListener('error', () => {
+      const err = node.error;
+      // code: 1=中止 2=网络 3=解码 4=格式/源不支持
+      console.error(`[audio-dom] error code=${err?.code} message=${err?.message} src=${node.src}`);
+    });
+
+    // pause / play 单独处理：除了留证据，还要把外部造成的状态变化同步回去，
+    // 走的路径和上面 howler 自己的监听器完全一致，保证两条来路状态一致。
+    //
+    // readyState=0 表示这个节点上已经没有媒体了——卸载/换源会把 src 抹掉，
+    // 那种 pause 是回收过程的一部分，不是「正在播的这首歌被掐了」，别误判。
+    const isLive = () => isCurrent() && node.readyState > 0;
+
+    node.addEventListener('pause', () => {
+      console.log(snapshot('pause'));
+      if (!isLive()) return;
+      const owner = this.probeOwners.get(node);
+      if (owner?.playing()) {
+        console.warn('[audio-dom] 音频被外部暂停（非 howler 发起），同步播放状态');
+        this.updateMediaSessionState(false, owner);
+        this.emit('pause');
+      }
+    });
+
+    node.addEventListener('play', () => {
+      console.log(snapshot('play'));
+      if (!isLive()) return;
+      const owner = this.probeOwners.get(node);
+      if (owner && !owner.playing()) {
+        console.warn('[audio-dom] 音频被外部恢复（非 howler 发起），同步播放状态');
+        this.updateMediaSessionState(true, owner);
+        this.emit('play');
+      }
     });
   }
 
@@ -850,6 +1163,8 @@ class AudioService {
       }
 
       this.currentTrack = null;
+      this.sessionPlayingReported = false;
+      this.stopPlayStateWatchdog();
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = 'none';
       }

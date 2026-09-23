@@ -1,6 +1,7 @@
 import { Howl } from 'howler';
 
 import type { SongResult } from '@/types/music';
+import { toPlayableUrl } from '@/utils';
 
 class PreloadService {
   private loadingPromises: Map<string | number, Promise<Howl>> = new Map();
@@ -95,7 +96,7 @@ class PreloadService {
   private _createSound(url: string): Promise<Howl> {
     return new Promise((resolve, reject) => {
       const sound = new Howl({
-        src: [url],
+        src: [toPlayableUrl(url)],
         html5: true,
         preload: true,
         autoplay: false,

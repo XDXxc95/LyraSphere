@@ -7,6 +7,21 @@ if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
 }
 
+// ---------------------------------------------------------------- 版本号
+//
+// 每次构建都必须产出一个「和上一版不同、且更大」的版本标识，否则覆盖安装时
+// 系统只当成同版本重装，应用内/第三方更新器也会一直判定「已是最新」。
+//
+// versionCode 是系统用来判断升级的整数，必须是单调递增且 < 2_100_000_000。
+// 这里用「自 1970 起的分钟数」：当前约 3e7，离上限还有 70 倍余量，分钟精度，
+// 天然单调，不用手工维护计数器。
+//
+// versionName 只是个给人看的字符串，拼上构建时间戳，方便一眼看出装的是哪一版。
+// 注意 Gradle 配置阶段只求值一次，所以同一次构建里三处用的是同一个时刻。
+def APP_BASE_VERSION = "5.1.0"
+def BUILD_STAMP = new Date().format('yyyyMMdd-HHmm')
+def BUILD_MINUTES = (System.currentTimeMillis() / 60000L) as int
+
 android {
     namespace "com.algermusic.app"
     compileSdk rootProject.ext.compileSdkVersion
@@ -14,8 +29,8 @@ android {
         applicationId "com.algermusic.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 50100
-        versionName "5.1.0"
+        versionCode BUILD_MINUTES
+        versionName "${APP_BASE_VERSION}-${BUILD_STAMP}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -44,6 +59,31 @@ android {
     }
 }
 
+// 产物命名：Lyra-Sphere-<基础版本号>-<yyyyMMdd-HHmm>.apk
+// 用的是 APP_BASE_VERSION + BUILD_STAMP，不是 variant.versionName——后者现在
+// 已经带了时间戳，直接拼会出现两段时间戳。
+// 同时把打好的包自动拷一份到项目根目录的 dist/，省掉手工 cp。
+android.applicationVariants.all { variant ->
+    // release 不加后缀，其他构建类型补上类型名以便区分
+    def typeSuffix = variant.buildType.name == 'release' ? '' : "-${variant.buildType.name}"
+    // 文件名里不放空格，productName "Lyra Sphere" 用连字符
+    def apkName = "Lyra-Sphere-${APP_BASE_VERSION}-${BUILD_STAMP}${typeSuffix}.apk"
+
+    variant.outputs.all { output ->
+        outputFileName = apkName
+
+        // 只有 release 包才进 dist/，debug 包留在构建目录里
+        if (variant.buildType.name == 'release') {
+            def builtApk = new File(output.outputFile.parentFile, apkName)
+            def copyTask = tasks.register("copy${variant.name.capitalize()}ApkToDist", Copy) {
+                from builtApk
+                into rootProject.file('../dist')
+            }
+            variant.assembleProvider.configure { finalizedBy copyTask }
+        }
+    }
+}
+
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
@@ -54,6 +94,7 @@ dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core:$androidxCoreVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"

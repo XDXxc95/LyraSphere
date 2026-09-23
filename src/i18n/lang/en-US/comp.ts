@@ -3,17 +3,6 @@ export default {
   homeListItem: {
     loading: 'Loading...'
   },
-  installApp: {
-    description: 'Install the application for a better experience',
-    noPrompt: 'Do not prompt again',
-    install: 'Install now',
-    cancel: 'Cancel',
-    download: 'Download',
-    downloadFailed: 'Download failed',
-    downloadComplete: 'Download complete',
-    downloadProblem: 'Download problem? Go to',
-    downloadProblemLinkText: 'Download the latest version'
-  },
   playlistDrawer: {
     title: 'Add to playlist',
     createPlaylist: 'Create new playlist',
@@ -74,32 +63,6 @@ export default {
       'By using this application, you understand and assume the relevant risks. The developer is not responsible for any loss.',
     agree: 'I have read and agree',
     disagree: 'Disagree and Exit'
-  },
-  donate: {
-    title: 'Support Developer',
-    subtitle: 'Your support is my motivation',
-    tip: 'Donation is completely voluntary. All functions can be used normally without donation. Thank you for your understanding and support!',
-    wechat: 'WeChat',
-    alipay: 'Alipay',
-    wechatQR: 'WeChat QR Code',
-    alipayQR: 'Alipay QR Code',
-    scanTip: 'Please use your phone to scan the QR code above to donate',
-    enterApp: 'Enter App',
-    noForce: 'No forced donation, click to enter'
-  },
-  coffee: {
-    title: 'Buy me a coffee',
-    alipay: 'Alipay',
-    wechat: 'Wechat',
-    alipayQR: 'Alipay QR code',
-    wechatQR: 'Wechat QR code',
-    coffeeDesc: 'A cup of coffee, a support',
-    coffeeDescLinkText: 'View more',
-    groupText: 'Wechat Public Account: AlgerMusic',
-    messages: {
-      copySuccess: 'Copied to clipboard'
-    },
-    donateList: 'Buy me a coffee'
   },
   playlistType: {
     title: 'Playlist Category',

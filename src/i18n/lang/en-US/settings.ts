@@ -9,7 +9,6 @@ export default {
     application: 'Application Settings',
     network: 'Network Settings',
     system: 'System Management',
-    donation: 'Donation',
     about: 'About'
   },
   basic: {
@@ -78,6 +77,9 @@ export default {
     },
     musicSources: 'Music Sources',
     musicSourcesDesc: 'Select music sources for song resolution',
+    neteaseApiUrl: 'Netease API URL',
+    neteaseApiUrlDesc: 'Used for search and song details. Leave empty to use the built-in default',
+    desktopOnly: 'Desktop only',
     musicSourcesWarning: 'At least one music source must be selected',
     musicUnblockEnable: 'Enable Music Unblocking',
     musicUnblockEnableDesc: 'When enabled, attempts to resolve unplayable songs',
@@ -119,6 +121,13 @@ export default {
       sectionTitle: 'Custom API Settings',
       importConfig: 'Import JSON Config',
       currentSource: 'Current Source',
+      importFromUrl: 'Import Config From URL',
+      urlPlaceholder: 'Enter the URL of a custom source config',
+      pasteJson: 'Paste JSON Config',
+      jsonPlaceholder: 'Paste the custom source JSON here',
+      apply: 'Apply',
+      resetPreset: 'Reset to Preset',
+      invalidJson: 'Invalid config: expected JSON with apiUrl, params and responseUrlPath',
       notImported: 'No custom source imported yet.',
       importSuccess: 'Successfully imported source: {name}',
       importFailed: 'Import failed: {message}',
@@ -281,6 +290,20 @@ export default {
     gotoGithub: 'Go to Github',
     author: 'Author',
     authorDesc: 'algerkong Give a star🌟',
+    log: {
+      title: 'Diagnostic Logs',
+      file: 'Log File',
+      fileDesc:
+        'Records the playback pipeline, audio focus and native service state. Export it when reporting a problem.',
+      openFolder: 'Export & Open',
+      share: 'Share',
+      clear: 'Clear Log',
+      clearDesc: 'Delete the current log file and start recording again',
+      opened: 'Exported to {path}',
+      openFailed: 'Could not open the folder, try sharing instead',
+      shareFailed: 'Failed to share',
+      cleared: 'Log cleared'
+    },
     messages: {
       checkError: 'Failed to check for updates, please try again later'
     }

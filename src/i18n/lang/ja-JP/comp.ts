@@ -3,17 +3,6 @@ export default {
   homeListItem: {
     loading: '読み込み中...'
   },
-  installApp: {
-    description: 'アプリをインストールして、より良い体験を',
-    noPrompt: '今後表示しない',
-    install: '今すぐインストール',
-    cancel: '後でインストール',
-    download: 'ダウンロード',
-    downloadFailed: 'ダウンロード失敗',
-    downloadComplete: 'ダウンロード完了',
-    downloadProblem: 'ダウンロードに問題がありますか？',
-    downloadProblemLinkText: '最新版をダウンロード'
-  },
   playlistDrawer: {
     title: 'プレイリストに追加',
     createPlaylist: '新しいプレイリストを作成',
@@ -74,32 +63,6 @@ export default {
       'このアプリを使用することで、関連するリスクを理解し、負担するものとします。開発者は一切の損失に対して責任を負いません。',
     agree: '以上の内容を読み、同意します',
     disagree: '同意せずに終了'
-  },
-  donate: {
-    title: '開発者を支援',
-    subtitle: '皆様のサポートが私の原動力です',
-    tip: '寄付は完全に任意です。寄付しなくてもすべての機能を通常通り使用できます。ご理解とご支援に感謝します！',
-    wechat: 'WeChat',
-    alipay: 'Alipay',
-    wechatQR: 'WeChat 受取コード',
-    alipayQR: 'Alipay 受取コード',
-    scanTip: 'スマートフォンのアプリで上記のQRコードをスキャンして寄付してください',
-    enterApp: 'アプリに入る',
-    noForce: '寄付は強制ではありません。クリックして入れます'
-  },
-  coffee: {
-    title: 'コーヒーをおごる',
-    alipay: 'Alipay',
-    wechat: 'WeChat Pay',
-    alipayQR: 'Alipay QRコード',
-    wechatQR: 'WeChat QRコード',
-    coffeeDesc: '一杯のコーヒー、一つのサポート',
-    coffeeDescLinkText: 'もっと見る',
-    groupText: '微信公众号：AlgerMusic',
-    messages: {
-      copySuccess: 'クリップボードにコピーしました'
-    },
-    donateList: 'コーヒーをおごる'
   },
   playlistType: {
     title: 'プレイリストカテゴリ',

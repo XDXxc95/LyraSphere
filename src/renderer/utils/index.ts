@@ -73,6 +73,30 @@ export const formatNumber = (num: string | number) => {
   return num.toString();
 };
 
+/**
+ * 把 local:// 转成交给播放器的 file:// 地址。
+ *
+ * local:// 是自定义协议，Chromium 不把它当作可范围读取（Range）的数据源，
+ * 起播时一旦设置 currentTime（恢复上次进度、拖进度条），底层就会报
+ * FFmpegDemuxer: data source error 直接断流；file:// 走文件数据源，seek 正常。
+ * 其余用途（封面、判断「本地音乐不过期」）继续用 local://，所以只在这里转换。
+ */
+export const toPlayableUrl = (url: string | undefined) => {
+  // 只有 Electron 的 local:// 有这个问题；手机端（Capacitor）走的是另一套，别动
+  if (!url || !isElectron || !url.startsWith('local://')) return url || '';
+
+  let filePath = url.replace(/^local:\/\/\/?/, '');
+  try {
+    filePath = decodeURIComponent(filePath);
+  } catch {
+    // 路径里本来就带 % 又不是转义序列（例如「100%纯音乐」），按原样用
+  }
+  if (/^\/[a-zA-Z]:\//.test(filePath)) filePath = filePath.slice(1);
+  filePath = filePath.replace(/\\/g, '/');
+
+  return `file:///${encodeURI(filePath).replace(/[?#]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase())}`;
+};
+
 export const getImgUrl = (url: string | undefined, size: string = '') => {
   if (!url) return '';
 

@@ -1,7 +1,17 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">AlgerMusicPlayer</string>
-    <string name="title_activity_main">AlgerMusicPlayer</string>
+    <!-- app_name 是启动器图标下显示的名字，所有语言共用，保持短 -->
+    <string name="app_name">Lyra</string>
+    <!-- 任务切换器/最近任务里显示的全名 -->
+    <string name="title_activity_main">Lyra Sphere</string>
     <string name="package_name">com.algermusic.app</string>
     <string name="custom_url_scheme">com.algermusic.app</string>
+
+    <!-- 通知栏媒体控制 -->
+    <string name="notification_channel_now_playing">正在播放</string>
+    <string name="notification_channel_now_playing_desc">显示当前播放的歌曲与播放控制</string>
+    <string name="notification_action_prev">上一首</string>
+    <string name="notification_action_play">播放</string>
+    <string name="notification_action_pause">暂停</string>
+    <string name="notification_action_next">下一首</string>
 </resources>

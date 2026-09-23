@@ -1,7 +1,7 @@
 {
   "name": "AlgerMusicPlayer",
   "version": "5.1.0",
-  "description": "Alger Music Player",
+  "description": "Lyra Sphere",
   "author": "Alger <algerkc@qq.com>",
   "main": "./out/main/index.js",
   "homepage": "https://github.com/algerkong/AlgerMusicPlayer",
@@ -19,7 +19,8 @@
     "build": "electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win --publish never",
+    "build:win": "npm run build && electron-builder --win zip --x64 --publish never",
+    "build:win:nsis": "npm run build && electron-builder --win --publish never",
     "build:mac": "npm run build && electron-builder --mac --x64 --publish never && cp dist/latest-mac.yml dist/latest-mac-x64.yml && electron-builder --mac --arm64 --publish never && cp dist/latest-mac.yml dist/latest-mac-arm64.yml && node scripts/merge_latest_mac_yml.mjs dist/latest-mac-x64.yml dist/latest-mac-arm64.yml dist/latest-mac.yml",
     "build:mac:x64": "npm run build && electron-builder --mac --x64 --publish never && cp dist/latest-mac.yml dist/latest-mac-x64.yml",
     "build:mac:arm64": "npm run build && electron-builder --mac --arm64 --publish never && cp dist/latest-mac.yml dist/latest-mac-arm64.yml",
@@ -122,7 +123,7 @@
   },
   "build": {
     "appId": "com.alger.music",
-    "productName": "AlgerMusicPlayer",
+    "productName": "Lyra Sphere",
     "publish": [
       {
         "provider": "github",
@@ -139,6 +140,11 @@
         ]
       }
     ],
+    "files": [
+      "**/*",
+      "!**/*.log",
+      "!dist/**"
+    ],
     "mac": {
       "icon": "resources/icon.icns",
       "target": [
@@ -152,7 +158,7 @@
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "extendInfo": {
-        "NSMicrophoneUsageDescription": "AlgerMusicPlayer needs access to the microphone for audio visualization.",
+        "NSMicrophoneUsageDescription": "Lyra Sphere needs access to the microphone for audio visualization.",
         "NSCameraUsageDescription": "Application requests access to the device's camera.",
         "NSDocumentsFolderUsageDescription": "Application requests access to the user's Documents folder.",
         "NSDownloadsFolderUsageDescription": "Application requests access to the user's Downloads folder."
@@ -161,7 +167,7 @@
       "identity": null,
       "type": "distribution",
       "binaries": [
-        "Contents/MacOS/AlgerMusicPlayer"
+        "Contents/MacOS/Lyra Sphere"
       ]
     },
     "win": {
@@ -215,10 +221,10 @@
       "uninstallerIcon": "resources/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "AlgerMusicPlayer",
+      "shortcutName": "Lyra",
       "include": "build/installer.nsh",
       "deleteAppDataOnUninstall": true,
-      "uninstallDisplayName": "AlgerMusicPlayer"
+      "uninstallDisplayName": "Lyra Sphere"
     }
   },
   "pnpm": {

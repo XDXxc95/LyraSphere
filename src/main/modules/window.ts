@@ -12,6 +12,7 @@ import {
 import Store from 'electron-store';
 import { join } from 'path';
 
+import { getSongTitle, SongInfo } from './tray';
 import {
   applyContentZoom,
   applyInitialState,
@@ -41,6 +42,36 @@ let preMiniModeState: WindowState = {
   y: undefined,
   isMaximized: false
 };
+
+// 主窗口是 frame:false 的自绘标题栏，窗口标题在应用里根本看不见，唯一的去处就是
+// Windows 任务栏悬停时那块缩略图浮层。所以这两个值只服务于任务栏，不参与任何界面渲染。
+/** 页面 <title> 里声明的标题，没在播放时用它兜底 */
+let appTitle = '';
+/** 当前播放歌曲的标题，空串表示没在播放 */
+let songTitle = '';
+/** 页面还没来得及给出标题时的兜底（正常情况兜底是 index.html 里的 <title>） */
+const FALLBACK_TITLE = 'Lyra Sphere';
+
+function applyTaskbarTitle(win: BrowserWindow) {
+  if (process.platform !== 'win32' || win.isDestroyed()) return;
+  win.setTitle(songTitle || appTitle || FALLBACK_TITLE);
+}
+
+/**
+ * 更新任务栏悬停浮层里的歌曲信息。
+ *
+ * 数据走的是托盘那条 IPC（update-current-song），格式也复用托盘的 getSongTitle，
+ * 两处显示的歌曲名不会飘。渲染进程那边虽然也会写 document.title，但只有 netease
+ * 音源才拼得上歌手，这里统一按 song.artists 取，各音源一致。
+ */
+export function updateTaskbarSongTitle(song: SongInfo | null) {
+  if (process.platform !== 'win32') return;
+
+  songTitle = song ? getSongTitle(song) : '';
+  if (mainWindowInstance && !mainWindowInstance.isDestroyed()) {
+    applyTaskbarTitle(mainWindowInstance);
+  }
+}
 
 /**
  * 设置应用退出状态
@@ -366,6 +397,14 @@ export function createMainWindow(icon: Electron.NativeImage): BrowserWindow {
 
   mainWindow.on('show', () => {
     setThumbarButtons(mainWindow);
+  });
+
+  // 页面自己写的 <title> 只当兜底存起来，不让它直接落到窗口标题上：playerCore 每次换歌
+  // 都会写一次 document.title，放任它生效就会把任务栏浮层里的歌名顶回 "Lyra Sphere - xxx"
+  mainWindow.on('page-title-updated', (event, title) => {
+    event.preventDefault();
+    appTitle = title;
+    applyTaskbarTitle(mainWindow);
   });
 
   // 处理窗口关闭事件

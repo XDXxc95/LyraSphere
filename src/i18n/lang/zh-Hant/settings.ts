@@ -9,7 +9,6 @@ export default {
     application: '應用程式設定',
     network: '網路設定',
     system: '系統管理',
-    donation: '捐贈支持',
     about: '關於'
   },
   basic: {
@@ -75,6 +74,9 @@ export default {
     },
     musicSources: '音源設定',
     musicSourcesDesc: '選擇音樂解析使用的音源平台',
+    neteaseApiUrl: '網易雲介面位址',
+    neteaseApiUrlDesc: '搜尋、歌曲詳情走的介面。留空則使用內建預設位址',
+    desktopOnly: '僅桌面端可用',
     musicSourcesWarning: '至少需要選擇一個音源平台',
     musicUnblockEnable: '啟用音樂解析',
     musicUnblockEnableDesc: '開啟後將嘗試解析無法播放的音樂',
@@ -112,6 +114,13 @@ export default {
       sectionTitle: '自訂 API 設定',
       importConfig: '匯入 JSON 設定',
       currentSource: '目前音源',
+      importFromUrl: '從 URL 匯入設定',
+      urlPlaceholder: '輸入自訂音源設定的 URL',
+      pasteJson: '貼上 JSON 設定',
+      jsonPlaceholder: '在此貼上自訂音源設定的 JSON',
+      apply: '套用',
+      resetPreset: '還原預設',
+      invalidJson: '設定格式不正確：必須是包含 apiUrl、params、responseUrlPath 的 JSON',
       notImported: '尚未匯入自訂音源。',
       importSuccess: '成功匯入音源：{name}',
       importFailed: '匯入失敗：{message}',
@@ -273,6 +282,19 @@ export default {
     gotoGithub: '前往 Github',
     author: '作者',
     authorDesc: 'algerkong 點個star🌟呗',
+    log: {
+      title: '診斷日誌',
+      file: '日誌檔案',
+      fileDesc: '記錄播放鏈路、音訊焦點與原生服務的執行狀態，排障時匯出給開發者',
+      openFolder: '匯出並開啟',
+      share: '分享',
+      clear: '清空日誌',
+      clearDesc: '刪除目前日誌檔案，下次重現問題時重新記錄',
+      opened: '已匯出到 {path}',
+      openFailed: '未能開啟目錄，請改用分享匯出',
+      shareFailed: '分享失敗',
+      cleared: '日誌已清空'
+    },
     messages: {
       checkError: '檢查更新失敗，請稍後重試'
     }

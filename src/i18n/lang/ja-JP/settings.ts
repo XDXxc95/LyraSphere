@@ -9,7 +9,6 @@ export default {
     application: 'アプリケーション設定',
     network: 'ネットワーク設定',
     system: 'システム管理',
-    donation: '寄付サポート',
     about: 'について'
   },
   basic: {
@@ -78,6 +77,9 @@ export default {
     },
     musicSources: '音源設定',
     musicSourcesDesc: '音楽解析に使用する音源プラットフォームを選択',
+    neteaseApiUrl: 'Netease API アドレス',
+    neteaseApiUrlDesc: '検索と楽曲詳細に使用します。空欄の場合は内蔵の既定値を使用します',
+    desktopOnly: 'デスクトップ版のみ',
     musicSourcesWarning: '少なくとも1つの音源プラットフォームを選択する必要があります',
     musicUnblockEnable: '音楽解析を有効にする',
     musicUnblockEnableDesc: '有効にすると、再生できない音楽の解析を試みます',
@@ -117,6 +119,14 @@ export default {
         'カスタム API を有効にするには、まずカスタム API をインポートする必要があります。',
       importConfig: 'JSON設定をインポート',
       currentSource: '現在の音源',
+      importFromUrl: 'URL から設定をインポート',
+      urlPlaceholder: 'カスタム音源設定の URL を入力',
+      pasteJson: 'JSON 設定を貼り付け',
+      jsonPlaceholder: 'ここにカスタム音源の JSON を貼り付けてください',
+      apply: '適用',
+      resetPreset: 'プリセットに戻す',
+      invalidJson:
+        '設定の形式が正しくありません：apiUrl、params、responseUrlPath を含む JSON が必要です',
       notImported: 'カスタム音源はまだインポートされていません。',
       importSuccess: '音源のインポートに成功しました: {name}',
       importFailed: 'インポートに失敗しました: {message}',
@@ -280,6 +290,20 @@ export default {
     gotoGithub: 'Githubへ',
     author: '作者',
     authorDesc: 'algerkong スターを付けてください🌟',
+    log: {
+      title: '診断ログ',
+      file: 'ログファイル',
+      fileDesc:
+        '再生経路・オーディオフォーカス・ネイティブサービスの状態を記録します。不具合報告時に書き出してください。',
+      openFolder: '書き出して開く',
+      share: '共有',
+      clear: 'ログを消去',
+      clearDesc: '現在のログファイルを削除し、次回の再現時から記録し直します',
+      opened: '{path} に書き出しました',
+      openFailed: 'フォルダを開けませんでした。共有で書き出してください',
+      shareFailed: '共有に失敗しました',
+      cleared: 'ログを消去しました'
+    },
     messages: {
       checkError: '更新確認に失敗しました。後でもう一度お試しください'
     }

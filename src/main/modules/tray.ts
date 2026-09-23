@@ -14,10 +14,13 @@ import { getLanguageOptions } from '../../i18n/utils';
 import { getStore } from './config';
 
 // 歌曲信息接口定义
-interface SongInfo {
+export interface SongInfo {
   name: string;
-  song: {
-    artists: Array<{ name: string; [key: string]: any }>;
+  // 各音源字段名不统一，歌手可能落在这三处里的任意一处（见 getArtistString）
+  ar?: Array<{ name: string; [key: string]: any }>;
+  artists?: Array<{ name: string; [key: string]: any }>;
+  song?: {
+    artists?: Array<{ name: string; [key: string]: any }>;
     [key: string]: any;
   };
   [key: string]: any;
@@ -32,6 +35,17 @@ let songTitleTray: Tray | null = null;
 
 let isPlaying = false;
 let currentSong: SongInfo | null = null;
+
+/** 没在播放时的托盘提示，与任务栏标题的兜底保持一致 */
+const APP_NAME = 'Lyra Sphere';
+
+/**
+ * 托盘提示的截断长度。Win32 的 NOTIFYICONDATA.szTip 只有 128 个字符，超了系统会从中间
+ * 硬切、不给省略号，所以贴着上限自己截（留几个字符给尾部的 "..."）。
+ *
+ * 菜单那边另说：getTruncatedSongTitle 的 14 字默认值是菜单宽度的考虑，这里不复用那个默认值。
+ */
+const TOOLTIP_MAX_LENGTH = 120;
 
 // 使用自动导入的语言选项
 const LANGUAGES = getLanguageOptions();
@@ -48,12 +62,19 @@ export function updatePlayState(playing: boolean) {
 
 // 获取艺术家名称字符串
 function getArtistString(song: SongInfo | null): string {
-  if (!song || !song.song || !song.song.artists) return '';
-  return song.song.artists.map((item) => item.name).join(' / ');
+  if (!song) return '';
+  // 网易云是 ar，别的音源塞在 artists 或 song.artists 里。只认 song.artists 的话，
+  // 网易云的歌（默认音源）会只剩歌名。
+  const artists = song.ar || song.artists || song.song?.artists;
+  if (!Array.isArray(artists) || artists.length === 0) return '';
+  return artists
+    .map((item) => item?.name)
+    .filter(Boolean)
+    .join(' / ');
 }
 
 // 获取歌曲完整标题（歌曲名 - 艺术家）
-function getSongTitle(song: SongInfo | null): string {
+export function getSongTitle(song: SongInfo | null): string {
   if (!song) return '未播放';
   const artistStr = getArtistString(song);
   return artistStr ? `${song.name} - ${artistStr}` : song.name;
@@ -66,11 +87,28 @@ function getTruncatedSongTitle(song: SongInfo | null, maxLength: number = 14): s
   return fullTitle.slice(0, maxLength) + '...';
 }
 
+/**
+ * 更新托盘的悬停提示（右下角图标）。
+ *
+ * 格式与任务栏一致，复用 getSongTitle，两处显示的歌名不会飘；没在播放时回落到应用名，
+ * 与任务栏标题的兜底同理。
+ *
+ * macOS 不走这里：那边已经有独立的歌曲状态栏项（songTitleTray），在 updateStatusBarTray
+ * 里单独维护，重复设置反而会跟它抢显示。
+ *
+ * 提示只跟当前歌曲有关，播放/暂停状态不改它（状态在托盘右键菜单里）。
+ */
+function updateTrayTooltip() {
+  if (!tray || process.platform === 'darwin') return;
+  tray.setToolTip(currentSong ? getTruncatedSongTitle(currentSong, TOOLTIP_MAX_LENGTH) : APP_NAME);
+}
+
 // 更新当前播放的音乐信息
 export function updateCurrentSong(song: SongInfo | null) {
   currentSong = song;
   if (tray) {
     updateTrayMenu(BrowserWindow.getAllWindows()[0]);
+    updateTrayTooltip();
   }
   // 更新状态栏歌曲信息
   updateStatusBarTray();
@@ -415,7 +453,7 @@ export function initializeTray(iconPath: string, mainWindow: BrowserWindow) {
   tray = new Tray(trayIcon);
 
   // 设置托盘图标的提示文字
-  tray.setToolTip('Alger Music Player');
+  updateTrayTooltip();
 
   // 初始化菜单
   updateTrayMenu(mainWindow);

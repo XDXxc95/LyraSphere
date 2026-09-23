@@ -2,7 +2,7 @@
   <div v-if="isComponent ? favoriteSongs.length : true" class="favorite-page h-full flex flex-col">
     <!-- Header Section -->
     <div
-      class="flex items-center justify-between px-6 py-4 flex-shrink-0"
+      class="flex items-center justify-between gap-3 px-4 py-4 md:px-6 flex-shrink-0"
       :class="setAnimationClass('animate__fadeInLeft')"
     >
       <div class="flex items-center gap-4">
@@ -16,64 +16,78 @@
         </div>
       </div>
 
-      <div v-if="!isComponent && isElectron" class="flex items-center gap-3">
-        <template v-if="!isSelecting">
-          <!-- Sort Controls -->
-          <div class="flex items-center bg-gray-100 dark:bg-neutral-800 rounded-full p-1 h-9">
-            <button
-              v-for="isDesc in [true, false]"
-              :key="String(isDesc)"
-              class="px-3 h-full rounded-full text-xs font-medium transition-all duration-300 flex items-center gap-1"
-              :class="
-                isDescending === isDesc
-                  ? 'bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              "
-              @click="toggleSort(isDesc)"
-            >
-              <i class="text-sm" :class="isDesc ? 'ri-sort-desc' : 'ri-sort-asc'"></i>
-              {{ isDesc ? t('favorite.descending') : t('favorite.ascending') }}
-            </button>
-          </div>
-
-          <button
-            class="h-9 px-4 rounded-full bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-medium transition-all duration-300 flex items-center gap-1.5"
-            @click="startSelect"
-          >
-            <i class="ri-checkbox-multiple-line text-sm"></i>
-            {{ t('favorite.batchDownload') }}
-          </button>
-        </template>
-
-        <!-- Selection Controls -->
-        <div
-          v-else
-          class="flex items-center gap-3 bg-white dark:bg-neutral-800 shadow-sm rounded-full px-4 py-1.5 border border-gray-100 dark:border-neutral-700 h-9"
+      <div class="flex items-center gap-3">
+        <!-- 播放全部。排序和批量下载是桌面专属，这个两端都要有，所以放在 isElectron 判断外面。
+             嵌入模式（isComponent）不给：那边只加载前 16 首，播「全部」名不副实。 -->
+        <button
+          v-if="!isComponent"
+          class="flex h-9 flex-shrink-0 items-center gap-1.5 rounded-full bg-primary px-3.5 text-xs font-semibold text-white shadow-sm transition-all duration-300 hover:scale-105 hover:bg-primary/90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+          :disabled="favoriteSongs.length === 0"
+          @click="playAll"
         >
-          <n-checkbox
-            :checked="isAllSelected"
-            :indeterminate="isIndeterminate"
-            size="small"
-            @update:checked="handleSelectAll"
+          <i class="ri-play-circle-line text-base"></i>
+          <span>{{ t('comp.musicList.playAll') }}</span>
+        </button>
+
+        <div v-if="!isComponent && isElectron" class="flex items-center gap-3">
+          <template v-if="!isSelecting">
+            <!-- Sort Controls -->
+            <div class="flex items-center bg-gray-100 dark:bg-neutral-800 rounded-full p-1 h-9">
+              <button
+                v-for="isDesc in [true, false]"
+                :key="String(isDesc)"
+                class="px-3 h-full rounded-full text-xs font-medium transition-all duration-300 flex items-center gap-1"
+                :class="
+                  isDescending === isDesc
+                    ? 'bg-white dark:bg-neutral-700 text-gray-900 dark:text-white shadow-sm'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                "
+                @click="toggleSort(isDesc)"
+              >
+                <i class="text-sm" :class="isDesc ? 'ri-sort-desc' : 'ri-sort-asc'"></i>
+                {{ isDesc ? t('favorite.descending') : t('favorite.ascending') }}
+              </button>
+            </div>
+
+            <button
+              class="h-9 px-4 rounded-full bg-primary/10 hover:bg-primary text-primary hover:text-white text-xs font-medium transition-all duration-300 flex items-center gap-1.5"
+              @click="startSelect"
+            >
+              <i class="ri-checkbox-multiple-line text-sm"></i>
+              {{ t('favorite.batchDownload') }}
+            </button>
+          </template>
+
+          <!-- Selection Controls -->
+          <div
+            v-else
+            class="flex items-center gap-3 bg-white dark:bg-neutral-800 shadow-sm rounded-full px-4 py-1.5 border border-gray-100 dark:border-neutral-700 h-9"
           >
-            <span class="text-xs">{{ t('common.selectAll') }}</span>
-          </n-checkbox>
-          <div class="h-3 w-px bg-gray-200 dark:bg-neutral-700 mx-1"></div>
-          <div class="flex items-center gap-2">
-            <button
-              class="h-6 px-3 rounded-full bg-primary text-white text-xs font-medium hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-              :disabled="selectedSongs.length === 0"
-              @click="handleBatchDownload"
+            <n-checkbox
+              :checked="isAllSelected"
+              :indeterminate="isIndeterminate"
+              size="small"
+              @update:checked="handleSelectAll"
             >
-              <i class="ri-download-line"></i>
-              {{ t('favorite.download', { count: selectedSongs.length }) }}
-            </button>
-            <button
-              class="h-6 px-3 rounded-full bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-gray-300 text-xs font-medium hover:bg-gray-200 dark:hover:bg-neutral-600 transition-colors"
-              @click="cancelSelect"
-            >
-              {{ t('common.cancel') }}
-            </button>
+              <span class="text-xs">{{ t('common.selectAll') }}</span>
+            </n-checkbox>
+            <div class="h-3 w-px bg-gray-200 dark:bg-neutral-700 mx-1"></div>
+            <div class="flex items-center gap-2">
+              <button
+                class="h-6 px-3 rounded-full bg-primary text-white text-xs font-medium hover:bg-primary-dark transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                :disabled="selectedSongs.length === 0"
+                @click="handleBatchDownload"
+              >
+                <i class="ri-download-line"></i>
+                {{ t('favorite.download', { count: selectedSongs.length }) }}
+              </button>
+              <button
+                class="h-6 px-3 rounded-full bg-gray-100 dark:bg-neutral-700 text-gray-600 dark:text-gray-300 text-xs font-medium hover:bg-gray-200 dark:hover:bg-neutral-600 transition-colors"
+                @click="cancelSelect"
+              >
+                {{ t('common.cancel') }}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -152,6 +166,7 @@ import { getMusicDetail } from '@/api/music';
 import PlayBottom from '@/components/common/PlayBottom.vue';
 import SongItem from '@/components/common/SongItem.vue';
 import { useDownload } from '@/hooks/useDownload';
+import { fetchSongsByIds, usePlayAll } from '@/hooks/usePlayAll';
 import { usePlayerStore } from '@/store';
 import type { SongResult } from '@/types/music';
 import { isElectron, setAnimationClass, setAnimationDelay } from '@/utils';
@@ -213,6 +228,8 @@ const toggleSort = (descending: boolean) => {
   currentPage.value = 1;
   favoriteSongs.value = [];
   noMore.value = false;
+  // 顺序都变了，后台那一轮补齐作废
+  cancelPlayAll();
   getFavoriteSongs();
 };
 
@@ -333,6 +350,8 @@ watch(
     hasLoaded.value = false;
     currentPage.value = 1;
     noMore.value = false;
+    // 收藏变了，列表内容跟着变，后台那一轮补齐作废
+    cancelPlayAll();
     await getFavoriteSongs();
     hasLoaded.value = true;
   },
@@ -342,6 +361,17 @@ watch(
 const handlePlay = () => {
   playerStore.setPlayList(favoriteSongs.value);
 };
+
+// 播放全部：先用已加载的立刻开播，完整列表在后台补进来
+const { playAll, cancel: cancelPlayAll } = usePlayAll({
+  getLoaded: () => favoriteSongs.value,
+  loadAll: async () => {
+    // 顺序跟 getCurrentPageIds 保持一致（倒序时最新收藏的在前）
+    let ids = [...favoriteList.value];
+    if (isDescending.value) ids = ids.reverse();
+    return await fetchSongsByIds(ids.filter((id): id is number => typeof id === 'number'));
+  }
+});
 
 const getItemAnimationDelay = (index: number) => {
   return setAnimationDelay(index, 30);

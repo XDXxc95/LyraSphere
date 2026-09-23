@@ -125,10 +125,10 @@
             <div class="absolute inset-0 bg-gradient-to-br from-black/10 to-black/30" />
 
             <!-- Content -->
-            <div class="relative flex h-full items-center gap-4 p-5">
+            <div class="relative flex h-full items-center gap-3 p-4 lg:gap-4 lg:p-5">
               <!-- Album Cover -->
               <div
-                class="fm-cover relative aspect-square flex-shrink-0 overflow-hidden rounded-xl shadow-lg transition-transform duration-500 group-hover:scale-[1.03]"
+                class="fm-cover relative flex-shrink-0 overflow-hidden rounded-xl shadow-lg transition-transform duration-500 group-hover:scale-[1.03]"
               >
                 <img
                   v-if="fmCurrentCover"
@@ -188,8 +188,11 @@
                     </button>
                   </div>
 
-                  <!-- FM Badge -->
-                  <span class="flex items-center gap-1 text-xs font-semibold text-white/50">
+                  <!-- FM Badge — 手机上收起：一行放不下三个按钮再加这块标，挤出去就会被
+                       卡片的 overflow-hidden 切掉半个字。上方快捷导航里已经写了「私人FM」 -->
+                  <span
+                    class="hidden items-center gap-1 text-xs font-semibold text-white/50 lg:flex"
+                  >
                     <i class="ri-radio-fill" />
                     {{ t('comp.homeHero.personalFm') }}
                   </span>
@@ -661,14 +664,27 @@ onActivated(() => {
   }
 }
 
-/* Hero grid — left wider, right narrower, equal row height */
+/* Hero grid — 窄屏单列堆叠，lg（1024px）起才左右分栏（左宽右窄、等高）。
+   分栏放在 lg 而不是 md，是因为 768–1023 这段宽度里右侧私人FM 那张卡（封面 + 三个控制按钮 +
+   文案，min-content 约 350px）塞不进 2fr 那一栏，会连内容一起被 overflow-hidden 切掉。
+
+   两处都必须是 minmax(0, …) 而不是裸的 fr：`fr` 轨道下限是 auto，也就是内容的 min-content
+   宽度，轨道会被内容顶得比容器还宽，表现是整页能左右晃。 */
 .hero-grid {
-  grid-template-columns: 3fr 2fr;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1024px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
 }
 
 /* Cards fill grid row height equally */
 .hero-grid > .hero-card {
   height: 100%;
+  /* 同上：格子里的项默认 min-width: auto，不归零的话内容照样能顶破已经收窄的轨道 */
+  min-width: 0;
 }
 .hero-grid > .hero-card > .daily-card,
 .hero-grid > .hero-card > .fm-card {
@@ -711,9 +727,20 @@ onActivated(() => {
   }
 }
 
-/* FM cover — sized relative to card, leaving padding space */
+/* FM cover — 宽屏按卡片高度撑成正方形，留一点内边距的空隙；窄屏反过来给死边长。
+   之前是无条件 `height: calc(100% - 6px)` + aspect-square，窄屏上由卡片高度反推出来的
+   宽度能超过一屏，这正是卡片撑破格子的来源。断点跟着 .hero-grid 走。 */
 .fm-cover {
-  height: calc(100% - 6px);
+  width: 80px;
+  height: 80px;
+}
+
+@media (min-width: 1024px) {
+  .fm-cover {
+    width: auto;
+    height: calc(100% - 6px);
+    aspect-ratio: 1 / 1;
+  }
 }
 
 /* FM equalizer bars */

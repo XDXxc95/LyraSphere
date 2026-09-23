@@ -1,7 +1,5 @@
 import { cloneDeep } from 'lodash';
-import { createDiscreteApi } from 'naive-ui';
 
-import i18n from '@/../i18n/renderer';
 import { getMusicLrc, getMusicUrl, getParsingMusicUrl } from '@/api/music';
 import { playbackRequestManager } from '@/services/playbackRequestManager';
 import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
@@ -9,8 +7,6 @@ import type { ILyric, ILyricText, IWordData, SongResult } from '@/types/music';
 import { getImgUrl, isElectron } from '@/utils';
 import { getImageLinearBackground } from '@/utils/linearColor';
 import { parseLyrics as parseYrcLyrics } from '@/utils/yrcParser';
-
-const { message } = createDiscreteApi(['message']);
 
 type DiskCacheResolveResult = {
   url?: string;
@@ -118,15 +114,16 @@ export const getSongUrl = async (
           if (isDownloaded) return customResult.data.data as any;
           return await resolveCachedPlaybackUrl(customResult.data.data.url, songData);
         } else {
-          console.log('自定义API解析失败，将使用默认降级流程...');
-          message.warning(i18n.global.t('player.reparse.customApiFailed'));
+          // 后续会用内置音源降级解析，成功时不应打扰用户，只留日志
+          console.warn('[getSongUrl] 自定义API未返回有效url，降级到内置音源');
         }
       } catch (error) {
         console.error('调用自定义API时发生错误:', error);
         if ((error as Error).message === 'Request cancelled') {
           throw error;
         }
-        message.error(i18n.global.t('player.reparse.customApiError'));
+        // 同样继续走降级流程，不弹窗；整条解析链都失败时由播放层统一提示
+        console.warn('[getSongUrl] 自定义API请求出错，降级到内置音源');
       }
     }
 
@@ -179,7 +176,10 @@ export const getSongUrl = async (
           throw new Error('Request cancelled');
         }
         if (isDownloaded) return res?.data?.data as any;
-        const parsedUrl = res?.data?.data?.url || null;
+        // 备用源没结果时退回官方给的地址。VIP 歌曲官方会返回一个 30 秒试听地址
+        // （url 有值 + freeTrialInfo 非空），以前这里只看备用源，等于把能播的试听地址扔了；
+        // 备用源在 Android 上又常年不可用，这些歌就整个变成「播放失败」。
+        const parsedUrl = res?.data?.data?.url || songDetail.url || null;
         return await resolveCachedPlaybackUrl(parsedUrl, songData);
       }
 

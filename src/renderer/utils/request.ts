@@ -13,11 +13,33 @@ interface CustomAxiosRequestConfig extends InternalAxiosRequestConfig {
   noRetry?: boolean;
 }
 
+/**
+ * 去掉用户填的地址末尾的斜杠。
+ *
+ * 这里返回的地址后面要直接拼 `/song/detail` 这种路径，留着尾斜杠会拼出双斜杠，
+ * 有些网关会当成另一条路由直接 404。用户从浏览器地址栏复制过来的地址基本都带尾斜杠。
+ */
+const stripTrailingSlash = (url: string) => url.replace(/\/+$/, '');
+
+/**
+ * 用户没配地址时用的默认值，也是设置页输入框的占位提示。
+ *
+ * VITE_API 只是「一个更好的默认值」，不是锁：用户在设置里填了地址就以他填的为准。
+ * 反过来的话，凡是用 VITE_API 构建出来的包，设置里那个输入框都是个摆设——写进去
+ * 新地址，请求照旧打到旧地址，比没有这个输入框还糟。
+ */
+export const DEFAULT_NETEASE_API = stripTrailingSlash(
+  import.meta.env.VITE_API || FALLBACK_NETEASE_API
+);
+
 const resolveBaseURL = () => {
   if (window.electron) {
     return `http://127.0.0.1:${setData?.musicApiPort}`;
   }
-  return import.meta.env.VITE_API || FALLBACK_NETEASE_API;
+  // 非 Electron 端（Web / Android）没有本地接口服务，只能连远端。
+  // setData 由请求拦截器每次请求刷新，所以用户改完地址不用重启就生效。
+  const customApiUrl = setData?.neteaseApiUrl?.trim();
+  return customApiUrl ? stripTrailingSlash(customApiUrl) : DEFAULT_NETEASE_API;
 };
 
 const baseURL = resolveBaseURL();

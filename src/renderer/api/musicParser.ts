@@ -5,7 +5,7 @@ import { SongSourceConfigManager } from '@/services/SongSourceConfigManager';
 import { useSettingsStore } from '@/store';
 import type { SongResult } from '@/types/music';
 import { isElectron } from '@/utils';
-import requestMusic from '@/utils/request_music';
+import requestMusic, { hasMusicProxy } from '@/utils/request_music';
 
 import type { ParsedMusicResult } from './gdmusic';
 import { parseFromGDMusic } from './gdmusic';
@@ -216,9 +216,13 @@ class RetryHelper {
  * @param data 歌曲数据
  * @returns 解析结果，失败时返回null
  */
-const getGDMusicAudio = async (id: number, data: SongResult): Promise<ParsedMusicResult | null> => {
+const getGDMusicAudio = async (
+  id: number,
+  data: SongResult,
+  quality: string
+): Promise<ParsedMusicResult | null> => {
   try {
-    const gdResult = await parseFromGDMusic(id, data, '999');
+    const gdResult = await parseFromGDMusic(id, data, quality);
     if (gdResult) {
       return gdResult;
     }
@@ -226,6 +230,26 @@ const getGDMusicAudio = async (id: number, data: SongResult): Promise<ParsedMusi
     console.error('GD音乐台解析失败:', error);
   }
   return null;
+};
+
+/**
+ * 后备方案：走构建时配置的 /music 解析代理。
+ *
+ * 没配代理时直接返回失败，不发那个注定拿不到东西的请求——baseURL 会是字符串 "undefined"，
+ * 拼出来是个相对路径，被 WebView 当成本地路由返回 index.html，白跑一趟还看不出错。
+ */
+const requestMusicProxy = async (id: number): Promise<MusicParseResult> => {
+  if (!hasMusicProxy()) {
+    console.warn('未配置 /music 解析代理（VITE_API_MUSIC），跳过后备方案');
+    return {
+      data: {
+        code: 500,
+        message: '未配置解析代理',
+        data: undefined
+      }
+    };
+  }
+  return await requestMusic.get<any>('/music', { params: { id } });
 };
 
 /**
@@ -349,7 +373,7 @@ class GDMusicStrategy implements MusicSourceStrategy {
     return sources.includes('gdmusic');
   }
 
-  async parse(id: number, data: SongResult): Promise<MusicParseResult | null> {
+  async parse(id: number, data: SongResult, quality?: string): Promise<MusicParseResult | null> {
     // 检查失败缓存
     if (CacheManager.isInFailedCache(id, this.name)) {
       return null;
@@ -358,7 +382,7 @@ class GDMusicStrategy implements MusicSourceStrategy {
     try {
       console.log('尝试使用GD音乐台解析...');
       const result = await RetryHelper.withRetry(async () => {
-        return await getGDMusicAudio(id, data);
+        return await getGDMusicAudio(id, data, quality || 'higher');
       });
 
       const adaptedResult = adaptParseResult(result);
@@ -386,6 +410,11 @@ class UnblockMusicStrategy implements MusicSourceStrategy {
   priority = 4;
 
   canHandle(sources: string[]): boolean {
+    // 这条链路整个挂在主进程的解锁服务上（window.api.unblockMusic），Web / Android 没有
+    // 主进程。不挡住的话，默认音源里的 migu/kugou/pyncmd 会让它恒为「可用」，然后在
+    // parse 里对着 undefined 取方法抛异常，还带着指数退避白等三秒。
+    if (!isElectron) return false;
+
     const unblockSources = sources.filter((source) => !['custom', 'gdmusic'].includes(source));
     return unblockSources.length > 0;
   }
@@ -500,23 +529,10 @@ export class MusicParser {
     const startTime = performance.now();
 
     try {
-      // 非 Electron 环境没有主进程的解锁服务，
-      // 优先用预置的自定义音源解析，失败再回退到 API 请求
-      if (!isElectron) {
-        console.log('非Electron环境，尝试自定义音源解析');
-        try {
-          const customResult = await parseFromCustomApi(id, data);
-          const adaptedResult = adaptParseResult(customResult);
-          if (adaptedResult?.data?.data?.url) {
-            console.log('非Electron环境自定义音源解析成功');
-            return adaptedResult;
-          }
-        } catch (error) {
-          console.error('非Electron环境自定义音源解析失败:', error);
-        }
-        console.log('非Electron环境，回退到API请求');
-        return await requestMusic.get<any>('/music', { params: { id } });
-      }
+      // 这里以前有一条 `if (!isElectron)` 的近路：非桌面端只试自定义音源，失败就直接打
+      // /music 代理，整段绕开策略工厂。结果是 LxMusic / GD音乐台在 Android 上永远不可达，
+      // 单曲音源配置、失败缓存、音质设置也一并失效。现在统一走下面的策略链——各策略自己
+      // 声明能在哪个端跑（见 UnblockMusicStrategy.canHandle），不需要在入口按平台分叉。
 
       // 获取设置存储
       let settingsStore: any;
@@ -524,7 +540,7 @@ export class MusicParser {
         settingsStore = useSettingsStore();
       } catch (error) {
         console.error('无法获取设置存储，使用后备方案:', error);
-        return await requestMusic.get<any>('/music', { params: { id } });
+        return await requestMusicProxy(id);
       }
 
       // 获取音源配置
@@ -554,7 +570,7 @@ export class MusicParser {
 
       if (musicSources.length === 0) {
         console.warn('没有配置可用的音源，使用后备方案');
-        return await requestMusic.get<any>('/music', { params: { id } });
+        return await requestMusicProxy(id);
       }
 
       // 获取可用的解析策略
@@ -565,7 +581,7 @@ export class MusicParser {
 
       if (availableStrategies.length === 0) {
         console.warn('没有可用的解析策略，使用后备方案');
-        return await requestMusic.get<any>('/music', { params: { id } });
+        return await requestMusicProxy(id);
       }
 
       console.log(
@@ -603,7 +619,7 @@ export class MusicParser {
     // 后备方案：使用API请求
     try {
       console.log('使用后备方案：API请求');
-      const result = await requestMusic.get<any>('/music', { params: { id } });
+      const result = await requestMusicProxy(id);
 
       // 如果后备方案成功，也进行缓存
       if (result?.data?.data?.url) {

@@ -3,17 +3,6 @@ export default {
   homeListItem: {
     loading: '로딩 중...'
   },
-  installApp: {
-    description: '앱을 설치하여 더 나은 경험을 얻으세요',
-    noPrompt: '다시 묻지 않기',
-    install: '지금 설치',
-    cancel: '나중에 설치',
-    download: '다운로드',
-    downloadFailed: '다운로드 실패',
-    downloadComplete: '다운로드 완료',
-    downloadProblem: '다운로드에 문제가 있나요?',
-    downloadProblemLinkText: '최신 버전 다운로드'
-  },
   playlistDrawer: {
     title: '플레이리스트에 추가',
     createPlaylist: '새 플레이리스트 만들기',
@@ -73,32 +62,6 @@ export default {
       '본 앱을 사용함으로써 관련 위험을 이해하고 감수하는 것으로 간주합니다. 개발자는 어떠한 손실에 대해서도 책임을 지지 않습니다.',
     agree: '숙지하였으며 이에 동의합니다',
     disagree: '동의하지 않음 및 정지'
-  },
-  donate: {
-    title: '개발자 지원',
-    subtitle: '여러분의 지원이 저의 원동력입니다',
-    tip: '후원은 완전히 자율적입니다. 후원하지 않더라도 모든 기능을 정상적으로 사용할 수 있습니다. 이해와 지원에 감사드립니다!',
-    wechat: 'WeChat',
-    alipay: 'Alipay',
-    wechatQR: 'WeChat 결제 코드',
-    alipayQR: 'Alipay 결제 코드',
-    scanTip: '휴대전화로 위 QR 코드를 스캔하여 후원해 주세요',
-    enterApp: '앱 시작하기',
-    noForce: '후원은 강제가 아닙니다. 클릭하여 시작할 수 있습니다'
-  },
-  coffee: {
-    title: '커피 한 잔 사주세요',
-    alipay: '알리페이',
-    wechat: '위챗 페이',
-    alipayQR: '알리페이 결제 QR코드',
-    wechatQR: '위챗 결제 QR코드',
-    coffeeDesc: '커피 한 잔, 하나의 지원',
-    coffeeDescLinkText: '더 보기',
-    groupText: '微信公众号：AlgerMusic',
-    messages: {
-      copySuccess: '클립보드에 복사됨'
-    },
-    donateList: '커피 한 잔 사주세요'
   },
   playlistType: {
     title: '플레이리스트 분류',

@@ -13,6 +13,7 @@
   "author": "Alger",
   "authorUrl": "https://github.com/algerkong",
   "musicApiPort": 30488,
+  "neteaseApiUrl": "",
   "closeAction": "ask",
   "musicQuality": "higher",
   "lyricTranslationEngine": "none",

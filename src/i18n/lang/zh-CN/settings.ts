@@ -9,7 +9,6 @@ export default {
     application: '应用设置',
     network: '网络设置',
     system: '系统管理',
-    donation: '捐赠支持',
     about: '关于'
   },
   basic: {
@@ -75,6 +74,9 @@ export default {
     },
     musicSources: '音源设置',
     musicSourcesDesc: '选择音乐解析使用的音源平台',
+    neteaseApiUrl: '网易云接口地址',
+    neteaseApiUrlDesc: '搜索、歌曲详情走的接口。留空则使用内置默认地址',
+    desktopOnly: '仅桌面端可用',
     musicSourcesWarning: '至少需要选择一个音源平台',
     musicUnblockEnable: '启用音乐解析',
     musicUnblockEnableDesc: '开启后将尝试解析无法播放的音乐',
@@ -116,6 +118,13 @@ export default {
       sectionTitle: '自定义 API 设置',
       importConfig: '导入 JSON 配置',
       currentSource: '当前音源',
+      importFromUrl: '从 URL 导入配置',
+      urlPlaceholder: '输入自定义音源配置的 URL',
+      pasteJson: '粘贴 JSON 配置',
+      jsonPlaceholder: '在此粘贴自定义音源配置的 JSON',
+      apply: '应用',
+      resetPreset: '恢复预置',
+      invalidJson: '配置格式不正确：需要是包含 apiUrl、params、responseUrlPath 的 JSON',
       notImported: '尚未导入自定义音源。',
       importSuccess: '成功导入音源: {name}',
       importFailed: '导入失败: {message}',
@@ -277,6 +286,19 @@ export default {
     gotoGithub: '前往 Github',
     author: '作者',
     authorDesc: 'algerkong 点个star🌟呗',
+    log: {
+      title: '诊断日志',
+      file: '日志文件',
+      fileDesc: '记录播放链路、音频焦点和原生服务的运行状态，排障时导出给开发者',
+      openFolder: '导出并打开',
+      share: '分享',
+      clear: '清空日志',
+      clearDesc: '删除当前日志文件，下次复现问题时重新记录',
+      opened: '已导出到 {path}',
+      openFailed: '未能打开目录，请改用分享导出',
+      shareFailed: '分享失败',
+      cleared: '日志已清空'
+    },
     messages: {
       checkError: '检查更新失败，请稍后重试'
     }
