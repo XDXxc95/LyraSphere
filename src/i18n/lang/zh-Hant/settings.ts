@@ -293,7 +293,14 @@ export default {
       opened: '已匯出到 {path}',
       openFailed: '未能開啟目錄，請改用分享匯出',
       shareFailed: '分享失敗',
-      cleared: '日誌已清空'
+      cleared: '日誌已清空',
+      fileDescDesktop: '記錄渲染行程與主行程的執行狀態，排障時匯出給開發者',
+      openFolderDesktop: '開啟日誌目錄',
+      openFailedDesktop: '未能開啟目錄，請改用「匯出到下載目錄」',
+      openedDesktop: '日誌目錄：{path}',
+      exportDesktop: '匯出到下載目錄',
+      exported: '已匯出到 {path}',
+      exportFailed: '匯出日誌失敗'
     },
     messages: {
       checkError: '檢查更新失敗，請稍後重試'

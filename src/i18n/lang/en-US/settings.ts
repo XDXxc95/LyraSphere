@@ -302,7 +302,15 @@ export default {
       opened: 'Exported to {path}',
       openFailed: 'Could not open the folder, try sharing instead',
       shareFailed: 'Failed to share',
-      cleared: 'Log cleared'
+      cleared: 'Log cleared',
+      fileDescDesktop:
+        'Records renderer and main process activity. Export it when reporting a problem.',
+      openFolderDesktop: 'Open Log Folder',
+      openFailedDesktop: 'Could not open the folder, use “Export to Downloads” instead',
+      openedDesktop: 'Log folder: {path}',
+      exportDesktop: 'Export to Downloads',
+      exported: 'Exported to {path}',
+      exportFailed: 'Failed to export the log'
     },
     messages: {
       checkError: 'Failed to check for updates, please try again later'

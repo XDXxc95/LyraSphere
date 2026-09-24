@@ -71,6 +71,28 @@ const api = {
   // 搜索建议
   getSearchSuggestions: (keyword: string) => ipcRenderer.invoke('get-search-suggestions', keyword),
 
+  // 诊断日志（对应 Android 端 DiagnosticsPlugin 的能力）
+  diagnosticsLog: (payload: { message: string; level?: string; tag?: string }) =>
+    ipcRenderer.invoke('diagnostics:log', payload) as Promise<void>,
+  diagnosticsInfo: () =>
+    ipcRenderer.invoke('diagnostics:info') as Promise<{
+      path: string;
+      dir: string;
+      sizeBytes: number;
+      exists: boolean;
+    }>,
+  diagnosticsClear: () => ipcRenderer.invoke('diagnostics:clear') as Promise<void>,
+  diagnosticsExport: () =>
+    ipcRenderer.invoke('diagnostics:export') as Promise<{
+      path: string;
+      sizeBytes: number;
+      supported: boolean;
+    }>,
+  diagnosticsOpenFolder: () =>
+    ipcRenderer.invoke('diagnostics:open-folder') as Promise<{ opened: boolean; path: string }>,
+  diagnosticsShare: () =>
+    ipcRenderer.invoke('diagnostics:share') as Promise<{ path: string }>,
+
   // 落雪音乐 HTTP 请求（绕过 CORS）
   lxMusicHttpRequest: (request: { url: string; options: any; requestId: string }) =>
     ipcRenderer.invoke('lx-music-http-request', request),

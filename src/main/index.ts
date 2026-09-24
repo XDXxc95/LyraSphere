@@ -5,8 +5,10 @@ import { join } from 'path';
 import type { Language } from '../i18n/main';
 import i18n from '../i18n/main';
 import { loadLyricWindow } from './lyric';
+import { installAppLog } from './modules/appLog';
 import { initializeCacheManager } from './modules/cache';
 import { initializeConfig } from './modules/config';
+import { initializeDiagnostics } from './modules/diagnostics';
 import { initializeFileManager } from './modules/fileManager';
 import { initializeFonts } from './modules/fonts';
 import { initializeLocalMusicScanner } from './modules/localMusicScanner';
@@ -47,6 +49,8 @@ function initialize(configStore: any) {
 
   // 初始化文件管理
   initializeFileManager();
+  // 诊断日志的 IPC（渲染进程 console 转发、导出、打开目录）
+  initializeDiagnostics();
   // 初始化歌词缓存管理
   initializeCacheManager();
   // 初始化其他 API （搜索建议等）
@@ -91,6 +95,9 @@ const isSingleInstance = app.requestSingleInstanceLock();
 if (!isSingleInstance) {
   app.quit();
 } else {
+  // 尽早开日志采集：下面的 GPU 设置、初始化各模块的 console 输出都要收进来
+  installAppLog();
+
   // 在应用准备就绪前初始化GPU加速设置
   // 必须在 app.ready 之前调用 disableHardwareAcceleration
   try {

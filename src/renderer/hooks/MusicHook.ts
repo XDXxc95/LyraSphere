@@ -317,11 +317,9 @@ const setupAudioListeners = () => {
           return;
         }
 
-        const currentTime = currentSound.seek() as number;
-        if (typeof currentTime !== 'number' || Number.isNaN(currentTime)) {
-          // 无效时间，跳过本次更新
-          return;
-        }
+        // 进度以底层 <audio> 为准（audioService 内部收口），howler 的记账会在
+        // 「howler 以为在播、元素其实被外部停了」时冻住不动
+        const currentTime = audioService.getCurrentPosition(currentSound);
 
         // 同步 sound.value 引用（确保外部也能拿到最新的）
         if (sound.value !== currentSound) {
@@ -427,17 +425,14 @@ const setupAudioListeners = () => {
       const currentSound = audioService.getCurrentSound();
       if (currentSound) {
         // 立即更新显示时间，不进行任何检查
-        const currentTime = currentSound.seek() as number;
-        if (typeof currentTime === 'number' && !Number.isNaN(currentTime)) {
-          nowTime.value = currentTime;
+        nowTime.value = audioService.getCurrentPosition(currentSound);
 
-          // 检查是否需要更新歌词
-          const newIndex = getLrcIndex(nowTime.value);
-          if (newIndex !== nowIndex.value) {
-            nowIndex.value = newIndex;
-            if (isElectron && isLyricWindowOpen.value) {
-              sendLyricToWin();
-            }
+        // 检查是否需要更新歌词
+        const newIndex = getLrcIndex(nowTime.value);
+        if (newIndex !== nowIndex.value) {
+          nowIndex.value = newIndex;
+          if (isElectron && isLyricWindowOpen.value) {
+            sendLyricToWin();
           }
         }
       }
@@ -452,11 +447,8 @@ const setupAudioListeners = () => {
     if (currentSound) {
       try {
         // 更新当前时间和总时长
-        const currentTime = currentSound.seek() as number;
-        if (typeof currentTime === 'number' && !Number.isNaN(currentTime)) {
-          nowTime.value = currentTime;
-          allTime.value = currentSound.duration() as number;
-        }
+        nowTime.value = audioService.getCurrentPosition(currentSound);
+        allTime.value = currentSound.duration() as number;
       } catch (error) {
         console.error('初始化时间和进度失败:', error);
       }
@@ -578,20 +570,20 @@ const setupAudioListeners = () => {
 };
 
 export const play = () => {
-  const currentSound = audioService.getCurrentSound();
-  if (currentSound) {
-    currentSound.play();
-    // 在播放时也进行状态检测，防止URL已过期导致无声
-    getPlayerStore().checkPlaybackState(getPlayerStore().playMusic);
-  }
+  // 别裸调 currentSound.play()：元素被外部暂停过时 howler 的 _seek 是过期的，
+  // 那样会从整首歌开头重放（详见 audioService.resumeAtCurrentPosition）。
+  // 起播失败时它返回 false，下面的状态检测就是兜底——它会走完整的重建链路。
+  audioService.resumeAtCurrentPosition();
+  // 在播放时也进行状态检测，防止URL已过期导致无声
+  getPlayerStore().checkPlaybackState(getPlayerStore().playMusic);
 };
 
 export const pause = () => {
   const currentSound = audioService.getCurrentSound();
   if (currentSound) {
     try {
-      // 保存当前播放进度
-      const currentTime = currentSound.seek() as number;
+      // 保存当前播放进度（以元素为准：存错了下次恢复就会从错的位置起播）
+      const currentTime = audioService.getCurrentPosition(currentSound);
       if (getPlayerStore().playMusic && getPlayerStore().playMusic.id) {
         localStorage.setItem(
           'playProgress',
@@ -744,8 +736,12 @@ export const setAudioTime = (index: number) => {
   const currentSound = sound.value;
   if (!currentSound) return;
 
-  currentSound.seek(lrcTimeArray.value[index]);
-  currentSound.play();
+  const target = lrcTimeArray.value[index];
+  if (typeof target !== 'number' || Number.isNaN(target)) return;
+
+  // 定位 + 起播走 audioService：裸的 play() 在 howler 以为还在播时会另起一个音源实例，
+  // 原来在响的那个被丢下，进度条和媒体会话就都不动了（详见 resumeAtCurrentPosition）
+  audioService.resumeAt(currentSound, target);
 };
 
 // 获取当前播放的歌词

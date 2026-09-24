@@ -77,6 +77,9 @@ class AudioService {
   private readonly playProbeIntervalMs = 1000;
   private readonly playProbeMissesToFix = 2;
 
+  /** 最近一次向上派发 end 的时间戳，用来丢掉重复的 end 事件（见 on('end') 处注释） */
+  private lastEndAt = 0;
+
   constructor() {
     if ('mediaSession' in navigator) {
       this.initMediaSession();
@@ -122,15 +125,13 @@ class AudioService {
 
     navigator.mediaSession.setActionHandler('seekbackward', (event) => {
       if (this.currentSound) {
-        const currentTime = this.currentSound.seek() as number;
-        this.seek(currentTime - (event.seekOffset || 10));
+        this.seek(this.getCurrentPosition() - (event.seekOffset || 10));
       }
     });
 
     navigator.mediaSession.setActionHandler('seekforward', (event) => {
       if (this.currentSound) {
-        const currentTime = this.currentSound.seek() as number;
-        this.seek(currentTime + (event.seekOffset || 10));
+        this.seek(this.getCurrentPosition() + (event.seekOffset || 10));
       }
     });
 
@@ -155,32 +156,111 @@ class AudioService {
    * 返回值表示「这条链路能不能自己处理」：false 时调用方应当走 store 那条完整播放链路。
    */
   public handleMediaPlay(): boolean {
-    const sound = this.currentSound;
-    const node = this.nodeOf(sound);
+    return this.resumeAtCurrentPosition();
+  }
 
-    // 用底层 <audio> 判断，而不是 howler 的 playing()：被外部掐断之后（应用内 MV / 直播
-    // 抢走音频焦点、系统打断）howler 仍然认为自己在播，`!playing()` 不成立，
-    // 这里就什么都不做，通知栏的播放键成了摆设。以 DOM 为准，只有真的在响才跳过。
-    if (sound && node && !node.paused && !node.ended) return true;
+  /**
+   * 接着当前进度恢复播放（而不是从头起）。
+   *
+   * 恢复播放入口原来都是裸调 `sound.play()`，html5 模式下这会「放到一半从头播」，
+   * 根子在 howler 的记账和 `<audio>` 是两套状态：
+   *
+   * 1. `sound._seek` 不随播放前进，只在 play / seek / pause 时写入。元素被 howler 之外的
+   *    东西暂停（Android 抢音频焦点、Windows 锁屏/休眠/别的应用出声、应用内 MV 的
+   *    `<video>`）时 `_paused`、`_seek` 都不动，而 `play()` 开头就是
+   *    `node.currentTime = seek`（howler 源码 playHtml5 第一行）——拿的是整首歌开始时那个
+   *    值，也就是 0。
+   * 2. 同一个原因，howler 仍认为自己在播，`play()` 里数不到「暂停且未结束」的实例，于是走
+   *    `_inactiveSound()` 另起一个音源：新 `<audio>` 从 0 播，旧的留在 `_sounds[0]`，
+   *    进度条、歌词和媒体会话的进度从此停在原地不动——看起来就像「换了个资源在放」。
+   *
+   * 对齐靠 `seek()`：它内部会先 `pause(id, true)` 把 `_seek` 从元素同步回来并置 `_paused`，
+   * 再写位置，最后在「原本在播」时用 `play(id)` 续上——带 id 就不会另起实例。
+   *
+   * @param target 续播位置（秒）；不传则取 `<audio>` 的真实进度，元素才是唯一不会骗人的进度源
+   * @returns 是否已由本方法接续；false 表示内部状态没法就地补救，调用方该走完整的重建链路
+   */
+  public resumeAtCurrentPosition(target?: number): boolean {
+    return this.resumeAt(this.currentSound, target);
+  }
 
-    if (!sound) {
-      // App 重建 / WebView 被回收之后到这里是没有实例的，这条链路造不出播放，
-      // 如实交出去让 store 重新走一遍解析 + 起播。
-      console.warn('[audioService] 收到恢复播放指令，但没有音频实例，交给上层重建播放链路');
+  /**
+   * 让指定 Howl 在 `target`（不传则取其 `<audio>` 的真实进度）处接着播。
+   * 用它的原因和内部机制见 {@link resumeAtCurrentPosition}。
+   */
+  public resumeAt(sound: Howl | null | undefined, target?: number): boolean {
+    const raw = sound as any;
+    const items = raw?._sounds as any[] | undefined;
+
+    // `_state === 'unloaded'` 也要挡住：playerCore 重建播放链路时会先把当前实例 unload 掉
+    // 再解析新地址，中间这段时间 currentSound 是一个已经卸载的 Howl，拿不出进度，
+    // 在这里起播只会从头开始。如实交出去，让上层走完整流程（它会从 playProgress 恢复进度）。
+    if (!sound || !items?.length || raw._state === 'unloaded') {
+      console.warn('[audioService] 恢复播放：没有可用的音频实例，交给上层重建播放链路');
       return false;
     }
 
-    // 这里刻意不复用 isSoundActuallyPlaying()：它把「取不到节点」当成「在播」，
-    // 那是给状态核对用的保守判断，放在这里就成了「拿不到节点就永远不起播」。
-    const raw = sound as any;
+    const node = this.nodeOf(sound);
+    const snd = items[0];
+    const position =
+      typeof target === 'number'
+        ? target
+        : typeof node?.currentTime === 'number'
+          ? node.currentTime
+          : 0;
+
     console.log(
       `[audioService] 恢复播放: node=${!!node} paused=${node?.paused} ended=${node?.ended}` +
         ` readyState=${node?.readyState} networkState=${node?.networkState}` +
+        ` 元素位置=${position.toFixed(2)}s` +
         ` howlerPlaying=${sound.playing()} playLock=${raw._playLock} state=${raw._state}` +
-        ` sndPaused=${raw._sounds?.[0]?._paused} sndEnded=${raw._sounds?.[0]?._ended}`
+        ` sndPaused=${snd._paused} sndEnded=${snd._ended} sndSeek=${snd._seek}`
     );
 
-    sound.play();
+    // 没指定位置、元素又真的在响 —— 什么都不用做。重复 play() 只会多起一个实例。
+    // 用底层 <audio> 判断而不是 howler 的 playing()：被外部掐断之后（应用内 MV / 直播
+    // 抢走音频焦点、系统打断）howler 仍然认为自己在播，`!playing()` 不成立，
+    // 这里就什么都不做，通知栏的播放键成了摆设。以 DOM 为准，只有真的在响才跳过。
+    if (typeof target !== 'number' && node && !node.paused && !node.ended) return true;
+
+    if (!node) {
+      // 拿不到节点（Web Audio 模式）就没有 DOM 进度可对齐，退回 howler 自己的记账：
+      // 那种模式下 `_seek` 由音频时钟维护，确实是可靠的。带 id 起播，避免另起实例。
+      sound.play(snd._id);
+      return true;
+    }
+
+    // howler 口径的「在播」要在 seek 之前取：它决定 seek() 之后还要不要手动起播。
+    const wasPlaying = sound.playing();
+
+    // 这一步同时完成三件事：把 `_seek`/`_ended`/`_paused` 与元素对齐、把位置挪到 position、
+    // 并在原本在播时用 play(id) 自己续上（不会是裸 play()，所以不会另起实例）。
+    sound.seek(position);
+
+    // seek() 在 howler 的 _playLock 卡住、或音频还没 loaded 时只会把这次定位塞进 _queue
+    // 等后续处理，本次恢复就落空了。落空时按元素的事实把内部状态摆正——位置、未结束、
+    // 已暂停，正是 pause() + seek() 正常跑完后的样子（不动 _id，实例还是这一个）。
+    let needPlay = !wasPlaying;
+    if (snd._seek !== position || snd._paused !== true) {
+      console.warn(
+        `[audioService] seek 没把内部状态对齐（playLock=${raw._playLock} state=${raw._state}` +
+          ` sndPaused=${snd._paused} sndSeek=${snd._seek}），按元素事实手工摆正`
+      );
+      snd._seek = position;
+      snd._ended = false;
+      snd._paused = true;
+      try {
+        node.currentTime = position;
+      } catch (error) {
+        console.error('[audioService] 对齐元素进度失败:', error);
+      }
+      // seek() 没生效，也就不会有它那次续播
+      needPlay = true;
+    }
+
+    // 带 id 起播：指定 id 时 howler 走 `_soundById()`，不会碰 `_inactiveSound()`，实例不会翻倍。
+    // 也刻意不在这里判 playing()——那又变成拿 howler 的记账做决定了。
+    if (needPlay) sound.play(snd._id);
     return true;
   }
 
@@ -283,12 +363,43 @@ class AudioService {
 
   /**
    * 取某个 Howl 底层的 `<audio>` 元素。
-   * html5 模式下 `_sounds[0]._node` 就是真正发声的元素；Web Audio 模式（桌面端开 EQ 走这条）
+   * html5 模式下 `_node` 就是真正发声的元素；Web Audio 模式（桌面端开 EQ 走这条）
    * 是 GainNode，没有 DOM 状态可查，返回 undefined。
+   *
+   * 挑节点时不能死盯 `_sounds[0]`：howler 在「以为自己还在播、实际元素已经停了」的状态下
+   * 被再 `play()` 一次，会往 `_sounds` 后面追加一个新 Sound（见 howler 的 `_inactiveSound`），
+   * 旧的那个仍留在 `_sounds[0]`。此时 `_sounds[0]` 指的是停住的旧节点，媒体会话的进度、
+   * 播放态核对全会跟着错位，所以优先挑正在发声的那个；都不在响就退到最后一个——追加的实例
+   * 总是排在后面。（这种情况本身已由 {@link resumeAt} 堵住，这里是兜底。）
    */
   private nodeOf(sound: Howl | null | undefined): HTMLMediaElement | undefined {
-    const node = (sound as any)?._sounds?.[0]?._node;
-    return node instanceof HTMLMediaElement ? node : undefined;
+    const items = (sound as any)?._sounds as any[] | undefined;
+    if (!items?.length) return undefined;
+
+    let last: HTMLMediaElement | undefined;
+    for (const item of items) {
+      const node = item?._node;
+      if (!(node instanceof HTMLMediaElement)) continue;
+      if (!node.paused && !node.ended) return node;
+      last = node;
+    }
+    return last;
+  }
+
+  /**
+   * 播放进度（秒），以底层 `<audio>` 为准。
+   *
+   * `Howl.seek()` 读的是 `_sounds[0]`，双实例时那可能是被丢下的旧节点（见 {@link nodeOf}），
+   * 进度会一直冻在旧位置。拿不到节点（Web Audio 模式）时才退回 howler 的记账。
+   * `Howl.seek()` 在定位被塞进 `_queue` 时会返回 Howl 自身，所以这里统一收口成数字。
+   */
+  public getCurrentPosition(sound?: Howl | null): number {
+    const target = sound === undefined ? this.currentSound : sound;
+    if (!target) return 0;
+
+    const node = this.nodeOf(target);
+    const position = node ? node.currentTime : (target.seek() as number);
+    return typeof position === 'number' && !Number.isNaN(position) ? position : 0;
   }
 
   /**
@@ -298,10 +409,9 @@ class AudioService {
   private pushCurrentPosition(force = false) {
     if (!this.currentSound) return;
 
-    const position = this.currentSound.seek() as number;
-    if (typeof position !== 'number' || Number.isNaN(position)) return;
-
-    updateNowPlayingPosition(position, this.currentSound.duration() as number, { force });
+    updateNowPlayingPosition(this.getCurrentPosition(), this.currentSound.duration() as number, {
+      force
+    });
   }
 
   /**
@@ -361,7 +471,7 @@ class AudioService {
       if (!this.currentSound) return;
 
       const duration = this.currentSound.duration();
-      const position = this.currentSound.seek() as number;
+      const position = this.getCurrentPosition();
       updateNowPlayingPosition(position, duration);
 
       if (!('mediaSession' in navigator) || this.isNativePlatform) return;
@@ -484,17 +594,20 @@ class AudioService {
   }
 
   private async setupEQ(sound: Howl) {
+    // 提到 try 外面：失败时要拿它把「元素已被接管」这件事补救回来（见 catch）
+    let audioNode: HTMLMediaElement | undefined;
+
     try {
       if (!isElectron) {
         console.log('Web环境中跳过EQ设置，避免CORS问题');
         this.bypass = true;
         return;
       }
-      const howl = sound as any;
+      // 取正在发声的那个节点（双实例时 `_sounds[0]` 可能是被丢下的旧节点，见 nodeOf）：
+      // 只把真正出声的元素接进 EQ 图，否则 EQ 作用在一个哑巴节点上，等于没有 EQ。
+      audioNode = this.nodeOf(sound);
 
-      const audioNode = howl._sounds?.[0]?._node;
-
-      if (!audioNode || !(audioNode instanceof HTMLMediaElement)) {
+      if (!audioNode) {
         if (this.retryCount < 3) {
           console.warn('等待音频节点初始化，重试次数:', this.retryCount + 1);
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -542,6 +655,11 @@ class AudioService {
           (audioNode as any).source = this.source;
         }
       } catch (e) {
+        // 这个元素已经被别的 AudioContext 接管过（多半是那个上下文已经被关掉了）。
+        // Chromium 对「同一个 <audio> 被接管过」这件事是终身记忆的：再建 source 一律抛
+        // InvalidStateError，而且这个元素从此就是个哑巴——paused 一直是 false、currentTime
+        // 却冻住不动、永远发不出声。记下来，别让它顺着 howler 的复用池传染给后面每一首。
+        this.poisonedNodes.add(audioNode);
         console.error('创建音频源节点失败:', e);
         throw e;
       }
@@ -573,8 +691,36 @@ class AudioService {
       console.log('EQ initialization successful');
     } catch (error) {
       console.error('EQ initialization failed:', error);
-      await this.disposeEQ();
-      throw error;
+      // 保留上下文，理由和 stop() 里那段一样：关掉它会把池子里的元素一个个变成哑巴
+      await this.disposeEQ(true);
+
+      // 元素被接管过的那种失败救不回来（它已经出不了声了），如实往上报，让上层重建
+      // 播放链路；重试时这个元素已被剔出复用池（见 evictPoisonedNodes），会拿到干净的。
+      if ((error as { name?: string } | null)?.name === 'InvalidStateError') {
+        throw error;
+      }
+
+      // 其它原因（节点没就绪、图连不上……）就只是这次没有 EQ：元素没被接管时本来就是
+      // 直接出声，不该为了 EQ 把整首歌废掉。
+      // 但「接管」是从 source 建好那一刻生效的：声音从此只走 AudioContext，把图一断了之
+      // 等于把元素插到一个不通的插座上——又是无声。所以这里退化成直通连接（source 直接
+      // 接输出），用户得到的是没有 EQ 的正常声音，而不是一首哑歌。
+      const hijacked = (audioNode as { source?: MediaElementAudioSourceNode } | undefined)?.source;
+      if (hijacked && this.context) {
+        try {
+          hijacked.disconnect();
+        } catch {
+          /* 已经断开 */
+        }
+        try {
+          hijacked.connect(this.context.destination);
+          console.warn('[audioService] EQ 图没搭起来，已把音频源直连输出（本次播放无 EQ）');
+        } catch (connectError) {
+          console.error('[audioService] 直连输出也失败，本次播放可能无声:', connectError);
+        }
+      }
+
+      console.warn('[audioService] EQ 初始化失败，本次播放降级为无 EQ');
     }
   }
 
@@ -730,7 +876,8 @@ class AudioService {
         clearTimeout(this.seekDebounceTimer);
         this.seekLock = false;
       }
-      this.currentSound.play();
+      // 走对齐后的续播，别裸 play()：元素被外部暂停过的话会把歌倒回开头
+      this.resumeAt(this.currentSound);
       return Promise.resolve(this.currentSound);
     }
 
@@ -751,9 +898,24 @@ class AudioService {
       return Promise.reject(new Error('缺少必要参数: url和track'));
     }
 
-    // 检查是否是同一首歌曲的无缝切换（Hot-Swap）
-    const isHotSwap =
-      this.currentTrack && track && this.currentTrack.id === track.id && this.currentSound;
+    // 检查是否是同一首歌曲的无缝切换（Hot-Swap）。
+    // 「上一首还活着」是前提：playerCore 重建播放链路时会先 stop + unload 掉当前实例，
+    // 再解析新地址；到这里 `currentSound` 往往已经是个 `_state === 'unloaded'`、
+    // `_sounds` 被清空过的 Howl。拿它同步进度只会得到 0——howler 的 `seek()` 在未加载时
+    // 既不读元素也没有元素可读（见 getCurrentPosition），于是这一首从中途重头放。
+    // 恢复位该由调用方通过 `seekTime` 传进来（playerCore.playAudio 从 playProgress 取）。
+    const previous = this.currentSound as any;
+    const previousUsable =
+      !!this.currentSound &&
+      previous._state === 'loaded' &&
+      // Web Audio 模式下进度由音频时钟维护，没有元素也读得准（见 getCurrentPosition）
+      (previous._webAudio || !!this.nodeOf(this.currentSound));
+    const isHotSwap = !!(
+      this.currentTrack &&
+      track &&
+      this.currentTrack.id === track.id &&
+      previousUsable
+    );
 
     if (isHotSwap) {
       console.log('audioService: 检测到同一首歌曲的源切换，启用无缝切换模式');
@@ -773,6 +935,9 @@ class AudioService {
       const tryPlay = async () => {
         try {
           console.log('audioService: 开始创建音频对象');
+
+          // 建 Howl 之前先清池子：哑巴元素一旦被发出来，这一首就白搭了
+          this.evictPoisonedNodes();
 
           // 确保 Howler 上下文已初始化
           if (!Howler.ctx) {
@@ -898,8 +1063,9 @@ class AudioService {
                     targetPos = seekTime;
                     console.log(`audioService: 使用指定的 seekTime: ${seekTime}s`);
                   } else if (this.currentSound) {
-                    // 否则同步当前进度
-                    targetPos = this.currentSound.seek() as number;
+                    // 否则同步当前进度：取元素的真实进度，别用 howler 的记账（它可能停在
+                    // 这首歌开始时那个值上，切过去就成了从 0 重放）
+                    targetPos = this.getCurrentPosition();
                   }
 
                   // 2. 同步新音频进度
@@ -910,6 +1076,10 @@ class AudioService {
                   await this.setupEQ(newSound);
 
                   // 4. 播放新音频
+                  // 这里是新实例的首次起播，上面那步 seek(targetPos) 已经把 `_seek` 写好、
+                  // 并把 `_paused = true / _ended = false` 摆成唯一一个「暂停且未结束」的实例，
+                  // howler 的 play() 会因为这唯一性而复用它并从 targetPos 播——不会从头开始。
+                  // （恢复播放入口不满足这个前提，必须走 resumeAt，见那里的注释。）
                   if (isPlay) {
                     newSound.play();
                   }
@@ -953,6 +1123,8 @@ class AudioService {
                       console.log('audioService: 音频完全初始化，isPlay =', isPlay);
                       if (isPlay) {
                         console.log('audioService: 开始播放');
+                        // 同上：新实例首次起播，`_seek` 已被上面的 seek(seekTime) 写好，
+                        // 没有「howler 以为在播」这个前提，裸 play() 是安全的
                         this.currentSound.play();
                       }
                     }
@@ -1010,9 +1182,20 @@ class AudioService {
             });
 
             soundInstance.on('end', () => {
-              if (this.currentSound === soundInstance) {
-                this.emit('end');
+              if (this.currentSound !== soundInstance) return;
+              // howler 每次 play() 都会给 `_endTimers[id]` 挂一个新的 ended 监听器，而
+              // `_endTimers` 只存得下最后一个——被覆盖掉的那些没人摘，最后一次播放结束时
+              // 会一起触发 `_ended()`，于是这里连收好几个 end，表现就是歌曲结尾连跳好几首。
+              // 一次真正的播放结束不可能在 1s 内来两次，按时间窗口把重复的丢掉。
+              const now = Date.now();
+              if (now - this.lastEndAt < 1000) {
+                console.warn(
+                  `[audioService] 忽略重复的 end 事件（距上次 ${now - this.lastEndAt}ms）`
+                );
+                return;
               }
+              this.lastEndAt = now;
+              this.emit('end');
             });
 
             soundInstance.on('seek', () => {
@@ -1040,6 +1223,34 @@ class AudioService {
 
   /** 已挂过 DOM 监听的 <audio> —— howler 的节点是复用池，同一个节点不要重复挂 */
   private probedNodes = new WeakSet<HTMLMediaElement>();
+
+  /**
+   * 已经被某个 AudioContext 接管过、又因为那个上下文没了而变成哑巴的 <audio>。
+   *
+   * Chromium 里「元素被接管」是终身状态：这类元素再 createMediaElementSource 会抛
+   * InvalidStateError（见 setupEQ 的 catch），而且它自己已经发不出声了。它们本身救不回来，
+   * 唯一要做的是别让 howler 的复用池把它们发给下一首——池子是 LIFO，刚 unload 的元素就是
+   * 下一个被 pop 的，不剔掉的话后面每一首都会撞上同一个错误。
+   */
+  private poisonedNodes = new WeakSet<HTMLMediaElement>();
+
+  /**
+   * 把已经变成哑巴的 <audio> 从 howler 的复用池里剔出去。
+   * 在每次建新 Howl 之前调用：那时上一首的节点刚被 unload 回池子，正是要拦的时机。
+   */
+  private evictPoisonedNodes() {
+    const pool = (Howler as any)._html5AudioPool as HTMLMediaElement[] | undefined;
+    if (!Array.isArray(pool)) return;
+
+    for (let i = pool.length - 1; i >= 0; i--) {
+      if (this.poisonedNodes.has(pool[i])) {
+        console.warn(
+          '[audioService] 从复用池里剔除一个被音频上下文接管过的 <audio>，避免它拖住后面每一首'
+        );
+        pool.splice(i, 1);
+      }
+    }
+  }
 
   /**
    * DOM 节点 → 当前拥有它的 Howl。
@@ -1168,7 +1379,18 @@ class AudioService {
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = 'none';
       }
-      this.disposeEQ();
+
+      // 这里必须保留上下文（keepContext=true），别关。
+      // <audio> 元素一旦被某个 AudioContext 接管过，Chromium 就永久记住这层关系：同一个
+      // 元素再 createMediaElementSource 一律抛 InvalidStateError，而且它当场变成哑巴
+      // （paused 一直是 false、currentTime 冻住、永远不出声）。而 howler 的 <audio> 是从
+      // 复用池里发的——刚 unload 的那个元素就是下一个 pop 拿到的那个。
+      // 所以关一次上下文，等于把「这首歌的元素」变成哑巴，并且它会在池子里一首接一首地
+      // 传下去：此后每次换歌都卡在 setupEQ 的 InvalidStateError 上，表现正是「切到了下一首
+      // 但没有声音」。留着这个上下文几乎不占资源，代价远小于把播放链路废掉。
+      // 注意：系统媒体会话的 stop（桌面端注册在 initMediaSession 里，任务栏/系统媒体控件
+      // 那套会走到它）以及 Android 通知栏的停止，都会进到这里。
+      void this.disposeEQ(true);
     } catch (error) {
       console.error('停止音频时发生错误:', error);
     }
@@ -1377,7 +1599,7 @@ class AudioService {
       navigator.mediaSession.setPositionState({
         duration: this.currentSound.duration(),
         playbackRate: rate,
-        position: this.currentSound.seek() as number
+        position: this.getCurrentPosition()
       });
     }
   }

@@ -297,7 +297,14 @@ export default {
       opened: '已导出到 {path}',
       openFailed: '未能打开目录，请改用分享导出',
       shareFailed: '分享失败',
-      cleared: '日志已清空'
+      cleared: '日志已清空',
+      fileDescDesktop: '记录渲染进程与主进程的运行状态，排障时导出给开发者',
+      openFolderDesktop: '打开日志目录',
+      openFailedDesktop: '未能打开目录，请改用「导出到下载目录」',
+      openedDesktop: '日志目录：{path}',
+      exportDesktop: '导出到下载目录',
+      exported: '已导出到 {path}',
+      exportFailed: '导出日志失败'
     },
     messages: {
       checkError: '检查更新失败，请稍后重试'

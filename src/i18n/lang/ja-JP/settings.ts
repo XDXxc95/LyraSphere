@@ -302,7 +302,15 @@ export default {
       opened: '{path} に書き出しました',
       openFailed: 'フォルダを開けませんでした。共有で書き出してください',
       shareFailed: '共有に失敗しました',
-      cleared: 'ログを消去しました'
+      cleared: 'ログを消去しました',
+      fileDescDesktop:
+        'レンダラーとメインプロセスの状態を記録します。不具合報告時に書き出してください。',
+      openFolderDesktop: 'ログフォルダを開く',
+      openFailedDesktop: 'フォルダを開けませんでした。「ダウンロードに書き出す」をご利用ください',
+      openedDesktop: 'ログフォルダ: {path}',
+      exportDesktop: 'ダウンロードに書き出す',
+      exported: '{path} に書き出しました',
+      exportFailed: 'ログの書き出しに失敗しました'
     },
     messages: {
       checkError: '更新確認に失敗しました。後でもう一度お試しください'

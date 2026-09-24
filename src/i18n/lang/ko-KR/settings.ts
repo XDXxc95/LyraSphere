@@ -303,7 +303,14 @@ export default {
       opened: '{path}에 내보냈습니다',
       openFailed: '폴더를 열 수 없습니다. 공유로 내보내 주세요',
       shareFailed: '공유 실패',
-      cleared: '로그를 지웠습니다'
+      cleared: '로그를 지웠습니다',
+      fileDescDesktop: '렌더러와 메인 프로세스 상태를 기록합니다. 문제 보고 시 내보내 주세요.',
+      openFolderDesktop: '로그 폴더 열기',
+      openFailedDesktop: '폴더를 열 수 없습니다. “다운로드로 내보내기”를 이용해 주세요',
+      openedDesktop: '로그 폴더: {path}',
+      exportDesktop: '다운로드로 내보내기',
+      exported: '{path}에 내보냈습니다',
+      exportFailed: '로그 내보내기 실패'
     },
     messages: {
       checkError: '업데이트 확인 실패, 나중에 다시 시도하세요'

@@ -467,6 +467,18 @@ export function createMainWindow(icon: Electron.NativeImage): BrowserWindow {
     return { action: 'deny' };
   });
 
+  // 渲染进程起不来时（页面加载失败 / 进程崩了），它自己的那套日志一条都不会有，
+  // 日志文件里会只剩主进程的半截时间线，事后很难分辨「是没输出」还是「压根没跑」
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[窗口] 渲染进程加载完成');
+  });
+  mainWindow.webContents.on('did-fail-load', (_event, code, description, url) => {
+    console.error(`[窗口] 渲染进程加载失败: ${code} ${description} ${url}`);
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(`[窗口] 渲染进程退出: ${details.reason} (exitCode=${details.exitCode})`);
+  });
+
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {

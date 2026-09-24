@@ -40,11 +40,15 @@
     </setting-item>
   </setting-section>
 
-  <!-- 排障用：只在原生端出现，桌面端日志在控制台里直接看 -->
+  <!-- 排障用：原生端和桌面端各有一套出口（见 utils/appLog.ts），浏览器里不出现 -->
   <setting-section v-if="logAvailable" :title="t('settings.about.log.title')">
     <setting-item :title="t('settings.about.log.file')">
       <template #description>
-        <span>{{ t('settings.about.log.fileDesc') }}</span>
+        <span>
+          {{
+            t(logIsDesktop ? 'settings.about.log.fileDescDesktop' : 'settings.about.log.fileDesc')
+          }}
+        </span>
         <div v-if="logInfo" class="mt-1 text-xs font-mono break-all opacity-70">
           {{ logInfo.path }}（{{ formatSize(logInfo.sizeBytes) }}）
         </div>
@@ -52,9 +56,20 @@
       <template #action>
         <div class="flex items-center gap-2 flex-wrap">
           <s-btn :loading="opening" @click="handleOpenLogFolder">
-            <i class="ri-folder-open-line mr-1"></i>{{ t('settings.about.log.openFolder') }}
+            <i class="ri-folder-open-line mr-1"></i>
+            {{
+              t(
+                logIsDesktop
+                  ? 'settings.about.log.openFolderDesktop'
+                  : 'settings.about.log.openFolder'
+              )
+            }}
           </s-btn>
-          <s-btn variant="ghost" @click="handleShareLog">
+          <!-- 桌面没有系统分享面板，改成显式的「导出到下载目录」 -->
+          <s-btn v-if="logIsDesktop" :loading="exporting" variant="ghost" @click="handleExportLog">
+            <i class="ri-download-2-line mr-1"></i>{{ t('settings.about.log.exportDesktop') }}
+          </s-btn>
+          <s-btn v-else variant="ghost" @click="handleShareLog">
             <i class="ri-share-line mr-1"></i>{{ t('settings.about.log.share') }}
           </s-btn>
         </div>
@@ -82,6 +97,7 @@ import { useSettingsStore } from '@/store/modules/settings';
 import { isElectron } from '@/utils';
 import {
   clearAppLog,
+  exportAppLog,
   getLogInfo,
   isAppLogAvailable,
   LogInfo,
@@ -200,8 +216,11 @@ const openAuthor = () => {
 // ==================== 诊断日志 ====================
 
 const logAvailable = isAppLogAvailable;
+/** 桌面端和原生端的出口不同，文案与退路都要分开（见 utils/appLog.ts） */
+const logIsDesktop = isElectron;
 const logInfo = ref<LogInfo | null>(null);
 const opening = ref(false);
+const exporting = ref(false);
 
 const formatSize = (bytes: number) => {
   if (bytes < 1024) return `${bytes} B`;
@@ -218,12 +237,21 @@ const handleOpenLogFolder = async () => {
   try {
     const result = await openAppLogFolder();
     if (result.opened) {
-      message.success(t('settings.about.log.opened', { path: result.path }));
+      message.success(
+        t(logIsDesktop ? 'settings.about.log.openedDesktop' : 'settings.about.log.opened', {
+          path: result.path
+        })
+      );
     } else {
-      // 有些文件管理器不认「打开目录」这个 Intent，退回分享面板，
-      // 用户照样能把文件发出来（发到微信/邮件/保存到文件都行）
-      message.warning(t('settings.about.log.openFailed', { path: result.path }));
-      await shareAppLog();
+      message.warning(
+        t(logIsDesktop ? 'settings.about.log.openFailedDesktop' : 'settings.about.log.openFailed', {
+          path: result.path
+        })
+      );
+      // 原生端有些文件管理器不认「打开目录」这个 Intent，退回分享面板，
+      // 用户照样能把文件发出来（发到微信/邮件/保存到文件都行）；
+      // 桌面端的 open-folder 内部已经退到「导出并在资源管理器里定位」，不必再补一刀
+      if (!logIsDesktop) await shareAppLog();
     }
     await refreshLogInfo();
   } catch (error) {
@@ -231,6 +259,24 @@ const handleOpenLogFolder = async () => {
     message.error(t('settings.about.log.openFailed', { path: '' }));
   } finally {
     opening.value = false;
+  }
+};
+
+const handleExportLog = async () => {
+  exporting.value = true;
+  try {
+    const result = await exportAppLog();
+    if (result) {
+      message.success(t('settings.about.log.exported', { path: result.path }));
+    } else {
+      message.error(t('settings.about.log.exportFailed'));
+    }
+    await refreshLogInfo();
+  } catch (error) {
+    console.error('导出日志失败:', error);
+    message.error(t('settings.about.log.exportFailed'));
+  } finally {
+    exporting.value = false;
   }
 };
 

@@ -32,6 +32,19 @@ interface API {
   importLxMusicScript: () => Promise<{ name: string; content: string } | null>;
   invoke: (channel: string, ...args: any[]) => Promise<any>;
   getSearchSuggestions: (keyword: string) => Promise<any>;
+  /** 诊断日志：渲染进程 console 转发进主进程的日志文件 */
+  diagnosticsLog: (payload: { message: string; level?: string; tag?: string }) => Promise<void>;
+  /** 诊断日志文件的位置与大小 */
+  diagnosticsInfo: () => Promise<{
+    path: string;
+    dir: string;
+    sizeBytes: number;
+    exists: boolean;
+  }>;
+  diagnosticsClear: () => Promise<void>;
+  diagnosticsExport: () => Promise<{ path: string; sizeBytes: number; supported: boolean }>;
+  diagnosticsOpenFolder: () => Promise<{ opened: boolean; path: string }>;
+  diagnosticsShare: () => Promise<{ path: string }>;
   lxMusicHttpRequest: (request: { url: string; options: any; requestId: string }) => Promise<any>;
   lxMusicHttpCancel: (requestId: string) => Promise<void>;
   /** 扫描指定文件夹中的本地音乐文件 */

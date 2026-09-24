@@ -143,7 +143,11 @@
     "files": [
       "**/*",
       "!**/*.log",
-      "!dist/**"
+      "!dist/**",
+      "!android/**",
+      "!docs/**",
+      "!src/**",
+      "!**/*.tsbuildinfo"
     ],
     "mac": {
       "icon": "resources/icon.icns",

@@ -641,9 +641,9 @@ export const usePlaylistStore = defineStore(
             playerCore.setPlayMusic(true);
             playerCore.userPlayIntent = true;
             const { audioService } = await import('@/services/audioService');
-            const sound = audioService.getCurrentSound();
-            if (sound) {
-              sound.play();
+            // 就地恢复，别裸调 sound.play()：元素被外部暂停过时 howler 的 _seek 是过期的，
+            // 那样会从整首歌开头重放（详见 audioService.resumeAtCurrentPosition）
+            if (audioService.resumeAtCurrentPosition()) {
               // 在恢复播放时也进行状态检测，防止URL已过期导致无声
               playerCore.checkPlaybackState(playerCore.playMusic);
             } else {
