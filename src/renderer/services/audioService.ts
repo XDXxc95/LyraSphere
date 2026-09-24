@@ -387,11 +387,36 @@ class AudioService {
   }
 
   /**
+   * 实例还活着吗。
+   *
+   * `stop()` + `unload()` 之后 howler 会把 `_state` 置成 `unloaded`、清掉 `_node`，但实例
+   * 本身还挂在 `currentSound` 上——这时 {@link getCurrentPosition} 读不出位置，只能返回 0。
+   *
+   * 需要区分「真的播到 0 秒」和「读不出来」的地方都得先问一句。最典型的是往 localStorage
+   * 落进度的心跳：切歌/重建中间有 `await`（取歌词、背景色、解析地址），50ms 一拍的心跳
+   * 必然落进这个空档，把 0 写成真实进度，之后任何按 `playProgress` 恢复的入口都会从头播。
+   */
+  public isSoundUsable(sound?: Howl | null): boolean {
+    const target = sound === undefined ? this.currentSound : sound;
+    if (!target) return false;
+
+    const anySound = target as any;
+    return (
+      anySound._state === 'loaded' &&
+      // Web Audio 模式下进度由音频时钟维护，没有元素也读得准
+      (anySound._webAudio || !!this.nodeOf(target))
+    );
+  }
+
+  /**
    * 播放进度（秒），以底层 `<audio>` 为准。
    *
    * `Howl.seek()` 读的是 `_sounds[0]`，双实例时那可能是被丢下的旧节点（见 {@link nodeOf}），
    * 进度会一直冻在旧位置。拿不到节点（Web Audio 模式）时才退回 howler 的记账。
    * `Howl.seek()` 在定位被塞进 `_queue` 时会返回 Howl 自身，所以这里统一收口成数字。
+   *
+   * 注意 0 是「读不出来」和「真在开头」共用的返回值，要区分的调用方先过
+   * {@link isSoundUsable}。
    */
   public getCurrentPosition(sound?: Howl | null): number {
     const target = sound === undefined ? this.currentSound : sound;
@@ -904,12 +929,7 @@ class AudioService {
     // `_sounds` 被清空过的 Howl。拿它同步进度只会得到 0——howler 的 `seek()` 在未加载时
     // 既不读元素也没有元素可读（见 getCurrentPosition），于是这一首从中途重头放。
     // 恢复位该由调用方通过 `seekTime` 传进来（playerCore.playAudio 从 playProgress 取）。
-    const previous = this.currentSound as any;
-    const previousUsable =
-      !!this.currentSound &&
-      previous._state === 'loaded' &&
-      // Web Audio 模式下进度由音频时钟维护，没有元素也读得准（见 getCurrentPosition）
-      (previous._webAudio || !!this.nodeOf(this.currentSound));
+    const previousUsable = this.isSoundUsable();
     const isHotSwap = !!(
       this.currentTrack &&
       track &&

@@ -254,7 +254,11 @@ export const usePlayerCoreStore = defineStore(
         // 重建之前先把真实进度落盘：下行 playAudio 会从 playProgress 取恢复点，
         // 而实例一旦 stop/unload 就再也读不出位置了（节点已还给 howler 的复用池）。
         // 不补这一手的话，同曲重建（URL 过期、播放状态兜底重试、换音源）只能退回两秒一次的
-        // 心跳值——心跳没跑起来或 songId 对不上时就是 0，整首从中途重头放。
+        // 心跳值，中间丢掉最多两秒。
+        //
+        // 这里写下的值必须活到 playAudio 来读——曾经被 50ms 的心跳冲掉过：stop/unload 之后
+        // 那个死实例还挂在 audioService.currentSound 上，心跳读到 0 就落盘 0，于是重建后从头播。
+        // 现在心跳和 pause 都先过 audioService.isSoundUsable，判定不可用就整拍跳过。
         const position = audioService.getCurrentPosition();
         const previousTrack = audioService.getCurrentTrack();
         if (previousTrack?.id && position > 0) {

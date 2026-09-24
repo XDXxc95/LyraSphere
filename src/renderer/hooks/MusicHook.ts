@@ -307,8 +307,10 @@ const setupAudioListeners = () => {
       try {
         // 每次从 audioService 获取最新的 sound 引用，而不是依赖闭包中的 sound.value
         const currentSound = audioService.getCurrentSound();
-        if (!currentSound) {
-          // sound 暂时为空（可能在切歌/重建中），不清除 interval，等待恢复
+        if (!currentSound || !audioService.isSoundUsable(currentSound)) {
+          // sound 暂时为空、或已经被 stop/unload 拆掉（切歌/重建中），不清除 interval，等待恢复。
+          // 「已经死掉但还挂在 currentSound 上」这种必须一起挡住：它读进度只会得到 0，
+          // 这一拍落盘就等于把真实进度清零，重建后从头上播。
           return;
         }
 
@@ -582,16 +584,19 @@ export const pause = () => {
   const currentSound = audioService.getCurrentSound();
   if (currentSound) {
     try {
-      // 保存当前播放进度（以元素为准：存错了下次恢复就会从错的位置起播）
-      const currentTime = audioService.getCurrentPosition(currentSound);
-      if (getPlayerStore().playMusic && getPlayerStore().playMusic.id) {
-        localStorage.setItem(
-          'playProgress',
-          JSON.stringify({
-            songId: getPlayerStore().playMusic.id,
-            progress: currentTime
-          })
-        );
+      // 保存当前播放进度（以元素为准：存错了下次恢复就会从错的位置起播）。
+      // sound 已经拆掉时读出来是 0，落盘等于把真实进度清零，和心跳那条路径同理，先过 isSoundUsable。
+      if (audioService.isSoundUsable(currentSound)) {
+        const currentTime = audioService.getCurrentPosition(currentSound);
+        if (getPlayerStore().playMusic && getPlayerStore().playMusic.id) {
+          localStorage.setItem(
+            'playProgress',
+            JSON.stringify({
+              songId: getPlayerStore().playMusic.id,
+              progress: currentTime
+            })
+          );
+        }
       }
 
       audioService.pause();
